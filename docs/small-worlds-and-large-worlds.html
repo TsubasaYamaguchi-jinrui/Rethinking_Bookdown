@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+<head>
+
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>2 Small Worlds and Large Worlds | Statistical Rethinking Second Edition</title>
+  <meta name="description" content="2 Small Worlds and Large Worlds | Statistical Rethinking Second Edition" />
+  <meta name="generator" content="bookdown 0.31 and GitBook 2.6.7" />
+
+  <meta property="og:title" content="2 Small Worlds and Large Worlds | Statistical Rethinking Second Edition" />
+  <meta property="og:type" content="book" />
+  
+  
+  
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="2 Small Worlds and Large Worlds | Statistical Rethinking Second Edition" />
+  
+  
+  
+
+<meta name="author" content="Tsubasa Yamaguchi" />
+
+
+<meta name="date" content="2023-02-01" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  
+  
+<link rel="prev" href="the-golem-of-prague.html"/>
+<link rel="next" href="sampling-the-imaginary.html"/>
+<script src="libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.4.6/dist/fuse.min.js"></script>
+<link href="libs/gitbook-2.6.7/css/style.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-table.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-bookdown.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-highlight.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-search.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-fontsettings.css" rel="stylesheet" />
+<link href="libs/gitbook-2.6.7/css/plugin-clipboard.css" rel="stylesheet" />
+
+
+
+
+
+
+
+
+<link href="libs/anchor-sections-1.1.0/anchor-sections.css" rel="stylesheet" />
+<link href="libs/anchor-sections-1.1.0/anchor-sections-hash.css" rel="stylesheet" />
+<script src="libs/anchor-sections-1.1.0/anchor-sections.js"></script>
+<script src="libs/htmlwidgets-1.6.1/htmlwidgets.js"></script>
+<link href="libs/datatables-css-0.0.0/datatables-crosstalk.css" rel="stylesheet" />
+<script src="libs/datatables-binding-0.27/datatables.js"></script>
+<link href="libs/dt-core-1.12.1/css/jquery.dataTables.min.css" rel="stylesheet" />
+<link href="libs/dt-core-1.12.1/css/jquery.dataTables.extra.css" rel="stylesheet" />
+<script src="libs/dt-core-1.12.1/js/jquery.dataTables.min.js"></script>
+<link href="libs/crosstalk-1.2.0/css/crosstalk.min.css" rel="stylesheet" />
+<script src="libs/crosstalk-1.2.0/js/crosstalk.min.js"></script>
+<link href="libs/tabwid-1.1.2/tabwid.css" rel="stylesheet" />
+<script src="libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
+
+
+<style type="text/css">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { color: #008000; } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { color: #008000; font-weight: bold; } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+</style>
+
+<style type="text/css">
+/* Used with Pandoc 2.11+ new --citeproc when CSL is used */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}
+</style>
+
+<link rel="stylesheet" href="custom_style.css" type="text/css" />
+</head>
+
+<body>
+
+
+
+  <div class="book without-animation with-summary font-size-2 font-family-1" data-basepath=".">
+
+    <div class="book-summary">
+      <nav role="navigation">
+
+<ul class="summary">
+<li class="chapter" data-level="" data-path="index.html"><a href="index.html"><i class="fa fa-check"></i>本稿の目的</a></li>
+<li class="chapter" data-level="" data-path="パッケージの読み込み.html"><a href="パッケージの読み込み.html"><i class="fa fa-check"></i>パッケージの読み込み</a></li>
+<li class="chapter" data-level="1" data-path="the-golem-of-prague.html"><a href="the-golem-of-prague.html"><i class="fa fa-check"></i><b>1</b> The Golem of Prague 　</a></li>
+<li class="chapter" data-level="2" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html"><i class="fa fa-check"></i><b>2</b> Small Worlds and Large Worlds</a>
+<ul>
+<li class="chapter" data-level="2.1" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#byesian-updating"><i class="fa fa-check"></i><b>2.1</b> Byesian Updating</a></li>
+<li class="chapter" data-level="2.2" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#making-th-model"><i class="fa fa-check"></i><b>2.2</b> Making th model</a>
+<ul>
+<li class="chapter" data-level="2.2.1" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#grid-approximation"><i class="fa fa-check"></i><b>2.2.1</b> Grid approximation</a></li>
+<li class="chapter" data-level="2.2.2" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#quadratic-approximation"><i class="fa fa-check"></i><b>2.2.2</b> Quadratic approximation</a></li>
+<li class="chapter" data-level="2.2.3" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#mcmc"><i class="fa fa-check"></i><b>2.2.3</b> MCMC</a></li>
+</ul></li>
+<li class="chapter" data-level="2.3" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#practice"><i class="fa fa-check"></i><b>2.3</b> Practice</a>
+<ul>
+<li class="chapter" data-level="2.3.1" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#m1"><i class="fa fa-check"></i><b>2.3.1</b> 2M1</a></li>
+<li class="chapter" data-level="2.3.2" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#m2"><i class="fa fa-check"></i><b>2.3.2</b> 2M2</a></li>
+<li class="chapter" data-level="2.3.3" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#m3"><i class="fa fa-check"></i><b>2.3.3</b> 2M3</a></li>
+<li class="chapter" data-level="2.3.4" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#m4"><i class="fa fa-check"></i><b>2.3.4</b> 2M4</a></li>
+<li class="chapter" data-level="2.3.5" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#m5"><i class="fa fa-check"></i><b>2.3.5</b> 2M5</a></li>
+<li class="chapter" data-level="2.3.6" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#m7"><i class="fa fa-check"></i><b>2.3.6</b> 2M7</a></li>
+<li class="chapter" data-level="2.3.7" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#h1"><i class="fa fa-check"></i><b>2.3.7</b> 2H1</a></li>
+<li class="chapter" data-level="2.3.8" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#h2"><i class="fa fa-check"></i><b>2.3.8</b> 2H2</a></li>
+<li class="chapter" data-level="2.3.9" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#h3"><i class="fa fa-check"></i><b>2.3.9</b> 2H3</a></li>
+<li class="chapter" data-level="2.3.10" data-path="small-worlds-and-large-worlds.html"><a href="small-worlds-and-large-worlds.html#h4"><i class="fa fa-check"></i><b>2.3.10</b> 2H4</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="3" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html"><i class="fa fa-check"></i><b>3</b> Sampling the Imaginary</a>
+<ul>
+<li class="chapter" data-level="3.1" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#sampling-from-a-grid-aproximate-posterior"><i class="fa fa-check"></i><b>3.1</b> Sampling from a grid-aproximate posterior</a></li>
+<li class="chapter" data-level="3.2" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#sampling-to-summarize"><i class="fa fa-check"></i><b>3.2</b> Sampling to summarize</a>
+<ul>
+<li class="chapter" data-level="3.2.1" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#intervals-of-defined-mass"><i class="fa fa-check"></i><b>3.2.1</b> Intervals of defined mass</a></li>
+<li class="chapter" data-level="3.2.2" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#highly-skewed-example"><i class="fa fa-check"></i><b>3.2.2</b> highly skewed example</a></li>
+<li class="chapter" data-level="3.2.3" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#point-estimate"><i class="fa fa-check"></i><b>3.2.3</b> Point estimate　　</a></li>
+</ul></li>
+<li class="chapter" data-level="3.3" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#sampling-to-simulate-prediction"><i class="fa fa-check"></i><b>3.3</b> Sampling to simulate prediction</a>
+<ul>
+<li class="chapter" data-level="3.3.1" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#model-checking"><i class="fa fa-check"></i><b>3.3.1</b> Model checking</a></li>
+<li class="chapter" data-level="3.3.2" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#practice-with-brms"><i class="fa fa-check"></i><b>3.3.2</b> Practice with brms</a></li>
+</ul></li>
+<li class="chapter" data-level="3.4" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#practice-1"><i class="fa fa-check"></i><b>3.4</b> Practice</a>
+<ul>
+<li class="chapter" data-level="3.4.1" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#e"><i class="fa fa-check"></i><b>3.4.1</b> 3E</a></li>
+<li class="chapter" data-level="3.4.2" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#m"><i class="fa fa-check"></i><b>3.4.2</b> 3M</a></li>
+<li class="chapter" data-level="3.4.3" data-path="sampling-the-imaginary.html"><a href="sampling-the-imaginary.html#h"><i class="fa fa-check"></i><b>3.4.3</b> 3H</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="4" data-path="geocentric-model.html"><a href="geocentric-model.html"><i class="fa fa-check"></i><b>4</b> Geocentric Model</a>
+<ul>
+<li class="chapter" data-level="4.1" data-path="geocentric-model.html"><a href="geocentric-model.html#why-normal-distributions-are-normal"><i class="fa fa-check"></i><b>4.1</b> Why normal distributions are normal</a></li>
+<li class="chapter" data-level="4.2" data-path="geocentric-model.html"><a href="geocentric-model.html#normal-by-multiplication"><i class="fa fa-check"></i><b>4.2</b> Normal by multiplication</a></li>
+<li class="chapter" data-level="4.3" data-path="geocentric-model.html"><a href="geocentric-model.html#gaussian-model-of-height"><i class="fa fa-check"></i><b>4.3</b> Gaussian model of height</a></li>
+<li class="chapter" data-level="4.4" data-path="geocentric-model.html"><a href="geocentric-model.html#grid-approximationで事後分布を描く"><i class="fa fa-check"></i><b>4.4</b> Grid approximationで事後分布を描く</a>
+<ul>
+<li class="chapter" data-level="4.4.1" data-path="geocentric-model.html"><a href="geocentric-model.html#事後分布からサンプリングする"><i class="fa fa-check"></i><b>4.4.1</b> 事後分布からサンプリングする</a></li>
+<li class="chapter" data-level="4.4.2" data-path="geocentric-model.html"><a href="geocentric-model.html#rethinking"><i class="fa fa-check"></i><b>4.4.2</b> rethinking</a></li>
+<li class="chapter" data-level="4.4.3" data-path="geocentric-model.html"><a href="geocentric-model.html#finding-posterior-with-brms"><i class="fa fa-check"></i><b>4.4.3</b> Finding posterior with brms</a></li>
+<li class="chapter" data-level="4.4.4" data-path="geocentric-model.html"><a href="geocentric-model.html#事後分布からのサンプリング"><i class="fa fa-check"></i><b>4.4.4</b> 事後分布からのサンプリング</a></li>
+</ul></li>
+<li class="chapter" data-level="4.5" data-path="geocentric-model.html"><a href="geocentric-model.html#linear-prediction"><i class="fa fa-check"></i><b>4.5</b> Linear prediction</a>
+<ul>
+<li class="chapter" data-level="4.5.1" data-path="geocentric-model.html"><a href="geocentric-model.html#finding-the-posterior-distribution"><i class="fa fa-check"></i><b>4.5.1</b> Finding the posterior distribution</a></li>
+<li class="chapter" data-level="4.5.2" data-path="geocentric-model.html"><a href="geocentric-model.html#plotting-posterior-inference-agaist-the-data"><i class="fa fa-check"></i><b>4.5.2</b> Plotting posterior inference agaist the data</a></li>
+<li class="chapter" data-level="4.5.3" data-path="geocentric-model.html"><a href="geocentric-model.html#plotting-regression-intervals-and-contours"><i class="fa fa-check"></i><b>4.5.3</b> Plotting regression intervals and contours</a></li>
+<li class="chapter" data-level="4.5.4" data-path="geocentric-model.html"><a href="geocentric-model.html#prediction-intervals"><i class="fa fa-check"></i><b>4.5.4</b> Prediction intervals</a></li>
+</ul></li>
+<li class="chapter" data-level="4.6" data-path="geocentric-model.html"><a href="geocentric-model.html#curves-from-lines"><i class="fa fa-check"></i><b>4.6</b> Curves from lines</a>
+<ul>
+<li class="chapter" data-level="4.6.1" data-path="geocentric-model.html"><a href="geocentric-model.html#polynomial-regression"><i class="fa fa-check"></i><b>4.6.1</b> Polynomial regression</a></li>
+<li class="chapter" data-level="4.6.2" data-path="geocentric-model.html"><a href="geocentric-model.html#overthinking"><i class="fa fa-check"></i><b>4.6.2</b> overthinking</a></li>
+<li class="chapter" data-level="4.6.3" data-path="geocentric-model.html"><a href="geocentric-model.html#splines"><i class="fa fa-check"></i><b>4.6.3</b> Splines</a></li>
+</ul></li>
+<li class="chapter" data-level="4.7" data-path="geocentric-model.html"><a href="geocentric-model.html#practice-2"><i class="fa fa-check"></i><b>4.7</b> Practice</a>
+<ul>
+<li class="chapter" data-level="4.7.1" data-path="geocentric-model.html"><a href="geocentric-model.html#m1-2"><i class="fa fa-check"></i><b>4.7.1</b> 4M1</a></li>
+<li class="chapter" data-level="4.7.2" data-path="geocentric-model.html"><a href="geocentric-model.html#m2-2"><i class="fa fa-check"></i><b>4.7.2</b> 4M2</a></li>
+<li class="chapter" data-level="4.7.3" data-path="geocentric-model.html"><a href="geocentric-model.html#m4-2"><i class="fa fa-check"></i><b>4.7.3</b> 4M4</a></li>
+<li class="chapter" data-level="4.7.4" data-path="geocentric-model.html"><a href="geocentric-model.html#m5-2"><i class="fa fa-check"></i><b>4.7.4</b> 4M5</a></li>
+<li class="chapter" data-level="4.7.5" data-path="geocentric-model.html"><a href="geocentric-model.html#m6-1"><i class="fa fa-check"></i><b>4.7.5</b> 4M6</a></li>
+<li class="chapter" data-level="4.7.6" data-path="geocentric-model.html"><a href="geocentric-model.html#m7-1"><i class="fa fa-check"></i><b>4.7.6</b> 4M7</a></li>
+<li class="chapter" data-level="4.7.7" data-path="geocentric-model.html"><a href="geocentric-model.html#m8"><i class="fa fa-check"></i><b>4.7.7</b> 4M8</a></li>
+<li class="chapter" data-level="4.7.8" data-path="geocentric-model.html"><a href="geocentric-model.html#h1-2"><i class="fa fa-check"></i><b>4.7.8</b> 4H1</a></li>
+<li class="chapter" data-level="4.7.9" data-path="geocentric-model.html"><a href="geocentric-model.html#h2-2"><i class="fa fa-check"></i><b>4.7.9</b> 4H2</a></li>
+<li class="chapter" data-level="4.7.10" data-path="geocentric-model.html"><a href="geocentric-model.html#h3-2"><i class="fa fa-check"></i><b>4.7.10</b> 4H3</a></li>
+<li class="chapter" data-level="4.7.11" data-path="geocentric-model.html"><a href="geocentric-model.html#h4-2"><i class="fa fa-check"></i><b>4.7.11</b> 4H4</a></li>
+<li class="chapter" data-level="4.7.12" data-path="geocentric-model.html"><a href="geocentric-model.html#h5-1"><i class="fa fa-check"></i><b>4.7.12</b> 4H5</a></li>
+<li class="chapter" data-level="4.7.13" data-path="geocentric-model.html"><a href="geocentric-model.html#h6"><i class="fa fa-check"></i><b>4.7.13</b> 4H6</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="5" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html"><i class="fa fa-check"></i><b>5</b> The many variables &amp; the spurious waffles</a>
+<ul>
+<li class="chapter" data-level="5.1" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#spurious-association"><i class="fa fa-check"></i><b>5.1</b> Spurious association</a>
+<ul>
+<li class="chapter" data-level="5.1.1" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#グラフを用いて因果モデルを考える"><i class="fa fa-check"></i><b>5.1.1</b> グラフを用いて因果モデルを考える</a></li>
+<li class="chapter" data-level="5.1.2" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#predictor-residual-plots"><i class="fa fa-check"></i><b>5.1.2</b> Predictor residual plots</a></li>
+<li class="chapter" data-level="5.1.3" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#posterior-prediction-plots"><i class="fa fa-check"></i><b>5.1.3</b> Posterior prediction plots</a></li>
+<li class="chapter" data-level="5.1.4" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#counterfactual-plot"><i class="fa fa-check"></i><b>5.1.4</b> Counterfactual plot</a></li>
+</ul></li>
+<li class="chapter" data-level="5.2" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#masked-relationship"><i class="fa fa-check"></i><b>5.2</b> Masked relationship</a>
+<ul>
+<li class="chapter" data-level="5.2.1" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#k-nモデル"><i class="fa fa-check"></i><b>5.2.1</b> K ~ Nモデル</a></li>
+<li class="chapter" data-level="5.2.2" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#k-mモデル"><i class="fa fa-check"></i><b>5.2.2</b> K ~ Mモデル</a></li>
+<li class="chapter" data-level="5.2.3" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#k-n-mモデル"><i class="fa fa-check"></i><b>5.2.3</b> K ~ N + Mモデル</a></li>
+<li class="chapter" data-level="5.2.4" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#counterfactual-plot-を描く"><i class="fa fa-check"></i><b>5.2.4</b> Counterfactual plot を描く</a></li>
+<li class="chapter" data-level="5.2.5" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#overthinking-1"><i class="fa fa-check"></i><b>5.2.5</b> Overthinking</a></li>
+</ul></li>
+<li class="chapter" data-level="5.3" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#categorical-variables"><i class="fa fa-check"></i><b>5.3</b> Categorical variables</a>
+<ul>
+<li class="chapter" data-level="5.3.1" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#two-categories"><i class="fa fa-check"></i><b>5.3.1</b> Two categories</a></li>
+<li class="chapter" data-level="5.3.2" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#many-categories"><i class="fa fa-check"></i><b>5.3.2</b> Many Categories</a></li>
+</ul></li>
+<li class="chapter" data-level="5.4" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#practice-3"><i class="fa fa-check"></i><b>5.4</b> Practice</a>
+<ul>
+<li class="chapter" data-level="5.4.1" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#m1-3"><i class="fa fa-check"></i><b>5.4.1</b> 5M1</a></li>
+<li class="chapter" data-level="5.4.2" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#m2-3"><i class="fa fa-check"></i><b>5.4.2</b> 5M2</a></li>
+<li class="chapter" data-level="5.4.3" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#m4-3"><i class="fa fa-check"></i><b>5.4.3</b> 5M4</a></li>
+<li class="chapter" data-level="5.4.4" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#h1-3"><i class="fa fa-check"></i><b>5.4.4</b> 5H1</a></li>
+<li class="chapter" data-level="5.4.5" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#h2-3"><i class="fa fa-check"></i><b>5.4.5</b> 5H2</a></li>
+<li class="chapter" data-level="5.4.6" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#h3-3"><i class="fa fa-check"></i><b>5.4.6</b> 5H3</a></li>
+<li class="chapter" data-level="5.4.7" data-path="the-many-variables-the-spurious-waffles.html"><a href="the-many-variables-the-spurious-waffles.html#h4-3"><i class="fa fa-check"></i><b>5.4.7</b> 5H4</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="6" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html"><i class="fa fa-check"></i><b>6</b> The Haunted DAG &amp; the Causal Terror</a>
+<ul>
+<li class="chapter" data-level="6.1" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#multicollinearity"><i class="fa fa-check"></i><b>6.1</b> Multicollinearity</a>
+<ul>
+<li class="chapter" data-level="6.1.1" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#multicollinear-milk"><i class="fa fa-check"></i><b>6.1.1</b> Multicollinear milk</a></li>
+</ul></li>
+<li class="chapter" data-level="6.2" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#post-treatment-bias"><i class="fa fa-check"></i><b>6.2</b> Post-treatment bias</a>
+<ul>
+<li class="chapter" data-level="6.2.1" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#blocked-by-consequence"><i class="fa fa-check"></i><b>6.2.1</b> Blocked by consequence</a></li>
+<li class="chapter" data-level="6.2.2" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#fungus-and-d-separation"><i class="fa fa-check"></i><b>6.2.2</b> Fungus and d-separation</a></li>
+</ul></li>
+<li class="chapter" data-level="6.3" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#collider-bias"><i class="fa fa-check"></i><b>6.3</b> Collider bias</a>
+<ul>
+<li class="chapter" data-level="6.3.1" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#collider-of-false-sorrow"><i class="fa fa-check"></i><b>6.3.1</b> Collider of false sorrow</a></li>
+<li class="chapter" data-level="6.3.2" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#the-haunted-dag"><i class="fa fa-check"></i><b>6.3.2</b> The haunted DAG</a></li>
+</ul></li>
+<li class="chapter" data-level="6.4" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#confronting-confoundings"><i class="fa fa-check"></i><b>6.4</b> Confronting confoundings</a>
+<ul>
+<li class="chapter" data-level="6.4.1" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#two-roads"><i class="fa fa-check"></i><b>6.4.1</b> Two roads</a></li>
+<li class="chapter" data-level="6.4.2" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#backdoor-waffles"><i class="fa fa-check"></i><b>6.4.2</b> Backdoor Waffles</a></li>
+</ul></li>
+<li class="chapter" data-level="6.5" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#practice-4"><i class="fa fa-check"></i><b>6.5</b> Practice</a>
+<ul>
+<li class="chapter" data-level="6.5.1" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#m1-4"><i class="fa fa-check"></i><b>6.5.1</b> 6M1</a></li>
+<li class="chapter" data-level="6.5.2" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#m2-4"><i class="fa fa-check"></i><b>6.5.2</b> 6M2</a></li>
+<li class="chapter" data-level="6.5.3" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#h1-4"><i class="fa fa-check"></i><b>6.5.3</b> 6H1</a></li>
+<li class="chapter" data-level="6.5.4" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#h2-4"><i class="fa fa-check"></i><b>6.5.4</b> 6H2</a></li>
+<li class="chapter" data-level="6.5.5" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#h3-4"><i class="fa fa-check"></i><b>6.5.5</b> 6H3</a></li>
+<li class="chapter" data-level="6.5.6" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#h4-4"><i class="fa fa-check"></i><b>6.5.6</b> 6H4</a></li>
+<li class="chapter" data-level="6.5.7" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#h5-2"><i class="fa fa-check"></i><b>6.5.7</b> 6H5</a></li>
+</ul></li>
+<li class="chapter" data-level="6.6" data-path="the-haunted-dag-the-causal-terror.html"><a href="the-haunted-dag-the-causal-terror.html#おまけ-ランダム効果を入れてみる"><i class="fa fa-check"></i><b>6.6</b> おまけ　ランダム効果を入れてみる</a></li>
+</ul></li>
+<li class="chapter" data-level="7" data-path="ulysses-compass.html"><a href="ulysses-compass.html"><i class="fa fa-check"></i><b>7</b> Ulysses’ Compass</a>
+<ul>
+<li class="chapter" data-level="7.1" data-path="ulysses-compass.html"><a href="ulysses-compass.html#the-problems-with-parameters"><i class="fa fa-check"></i><b>7.1</b> The problems with parameters</a>
+<ul>
+<li class="chapter" data-level="7.1.1" data-path="ulysses-compass.html"><a href="ulysses-compass.html#more-parameters-always-improve-fit"><i class="fa fa-check"></i><b>7.1.1</b> More parameters always improve fit</a></li>
+<li class="chapter" data-level="7.1.2" data-path="ulysses-compass.html"><a href="ulysses-compass.html#too-few-parameters-hurts-too"><i class="fa fa-check"></i><b>7.1.2</b> Too few parameters hurts too</a></li>
+</ul></li>
+<li class="chapter" data-level="7.2" data-path="ulysses-compass.html"><a href="ulysses-compass.html#entropy-and-accuracy"><i class="fa fa-check"></i><b>7.2</b> Entropy and accuracy</a>
+<ul>
+<li class="chapter" data-level="7.2.1" data-path="ulysses-compass.html"><a href="ulysses-compass.html#information-and-uncertainty"><i class="fa fa-check"></i><b>7.2.1</b> Information and uncertainty</a></li>
+<li class="chapter" data-level="7.2.2" data-path="ulysses-compass.html"><a href="ulysses-compass.html#from-entropy-to-acculacy"><i class="fa fa-check"></i><b>7.2.2</b> From entropy to acculacy</a></li>
+<li class="chapter" data-level="7.2.3" data-path="ulysses-compass.html"><a href="ulysses-compass.html#estimating-divergence"><i class="fa fa-check"></i><b>7.2.3</b> Estimating divergence</a></li>
+<li class="chapter" data-level="7.2.4" data-path="ulysses-compass.html"><a href="ulysses-compass.html#scoring-the-right-data"><i class="fa fa-check"></i><b>7.2.4</b> Scoring the right data</a></li>
+</ul></li>
+<li class="chapter" data-level="7.3" data-path="ulysses-compass.html"><a href="ulysses-compass.html#golem-taming-regularization"><i class="fa fa-check"></i><b>7.3</b> Golem taming: regularization</a></li>
+<li class="chapter" data-level="7.4" data-path="ulysses-compass.html"><a href="ulysses-compass.html#predicting-predictive-accuracy"><i class="fa fa-check"></i><b>7.4</b> Predicting predictive accuracy</a>
+<ul>
+<li class="chapter" data-level="7.4.1" data-path="ulysses-compass.html"><a href="ulysses-compass.html#cross-validation"><i class="fa fa-check"></i><b>7.4.1</b> Cross validation</a></li>
+<li class="chapter" data-level="7.4.2" data-path="ulysses-compass.html"><a href="ulysses-compass.html#information-criteria"><i class="fa fa-check"></i><b>7.4.2</b> Information criteria</a></li>
+<li class="chapter" data-level="7.4.3" data-path="ulysses-compass.html"><a href="ulysses-compass.html#overthinking-waic-calculation"><i class="fa fa-check"></i><b>7.4.3</b> overthinking: WAIC calculation</a></li>
+<li class="chapter" data-level="7.4.4" data-path="ulysses-compass.html"><a href="ulysses-compass.html#comparing-cv-psis-and-waic"><i class="fa fa-check"></i><b>7.4.4</b> Comparing CV, PSIS, and WAIC</a></li>
+</ul></li>
+<li class="chapter" data-level="7.5" data-path="ulysses-compass.html"><a href="ulysses-compass.html#model-comparison"><i class="fa fa-check"></i><b>7.5</b> Model comparison</a>
+<ul>
+<li class="chapter" data-level="7.5.1" data-path="ulysses-compass.html"><a href="ulysses-compass.html#model-mis-selection"><i class="fa fa-check"></i><b>7.5.1</b> Model mis-selection</a></li>
+<li class="chapter" data-level="7.5.2" data-path="ulysses-compass.html"><a href="ulysses-compass.html#outlier-and-other-illusions"><i class="fa fa-check"></i><b>7.5.2</b> Outlier and other illusions</a></li>
+</ul></li>
+<li class="chapter" data-level="7.6" data-path="ulysses-compass.html"><a href="ulysses-compass.html#practice-5"><i class="fa fa-check"></i><b>7.6</b> Practice</a>
+<ul>
+<li class="chapter" data-level="7.6.1" data-path="ulysses-compass.html"><a href="ulysses-compass.html#e2"><i class="fa fa-check"></i><b>7.6.1</b> 7E2</a></li>
+<li class="chapter" data-level="7.6.2" data-path="ulysses-compass.html"><a href="ulysses-compass.html#e3"><i class="fa fa-check"></i><b>7.6.2</b> 7E3</a></li>
+<li class="chapter" data-level="7.6.3" data-path="ulysses-compass.html"><a href="ulysses-compass.html#e4"><i class="fa fa-check"></i><b>7.6.3</b> 7E4</a></li>
+<li class="chapter" data-level="7.6.4" data-path="ulysses-compass.html"><a href="ulysses-compass.html#m4-4"><i class="fa fa-check"></i><b>7.6.4</b> 7M4</a></li>
+<li class="chapter" data-level="7.6.5" data-path="ulysses-compass.html"><a href="ulysses-compass.html#h1-5"><i class="fa fa-check"></i><b>7.6.5</b> 7H1</a></li>
+<li class="chapter" data-level="7.6.6" data-path="ulysses-compass.html"><a href="ulysses-compass.html#h2-5"><i class="fa fa-check"></i><b>7.6.6</b> 7H2</a></li>
+<li class="chapter" data-level="7.6.7" data-path="ulysses-compass.html"><a href="ulysses-compass.html#h3-5"><i class="fa fa-check"></i><b>7.6.7</b> 7H3</a></li>
+<li class="chapter" data-level="7.6.8" data-path="ulysses-compass.html"><a href="ulysses-compass.html#h4-5"><i class="fa fa-check"></i><b>7.6.8</b> 7H4</a></li>
+<li class="chapter" data-level="7.6.9" data-path="ulysses-compass.html"><a href="ulysses-compass.html#h5-3"><i class="fa fa-check"></i><b>7.6.9</b> 7H5</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="8" data-path="conditional-manatees.html"><a href="conditional-manatees.html"><i class="fa fa-check"></i><b>8</b> Conditional Manatees</a>
+<ul>
+<li class="chapter" data-level="8.1" data-path="conditional-manatees.html"><a href="conditional-manatees.html#building-an-interaction"><i class="fa fa-check"></i><b>8.1</b> Building an interaction</a>
+<ul>
+<li class="chapter" data-level="8.1.1" data-path="conditional-manatees.html"><a href="conditional-manatees.html#making-a-rugged-model"><i class="fa fa-check"></i><b>8.1.1</b> Making a rugged model</a></li>
+<li class="chapter" data-level="8.1.2" data-path="conditional-manatees.html"><a href="conditional-manatees.html#adding-an-indicator-variable-isnt-enough"><i class="fa fa-check"></i><b>8.1.2</b> Adding an indicator variable isn’t enough</a></li>
+<li class="chapter" data-level="8.1.3" data-path="conditional-manatees.html"><a href="conditional-manatees.html#adding-interaction-does-work"><i class="fa fa-check"></i><b>8.1.3</b> Adding interaction does work</a></li>
+<li class="chapter" data-level="8.1.4" data-path="conditional-manatees.html"><a href="conditional-manatees.html#plotting-the-interaction"><i class="fa fa-check"></i><b>8.1.4</b> Plotting the interaction</a></li>
+</ul></li>
+<li class="chapter" data-level="8.2" data-path="conditional-manatees.html"><a href="conditional-manatees.html#symmetry-of-interaction"><i class="fa fa-check"></i><b>8.2</b> Symmetry of interaction</a></li>
+<li class="chapter" data-level="8.3" data-path="conditional-manatees.html"><a href="conditional-manatees.html#continuous-interaction"><i class="fa fa-check"></i><b>8.3</b> Continuous interaction</a>
+<ul>
+<li class="chapter" data-level="8.3.1" data-path="conditional-manatees.html"><a href="conditional-manatees.html#a-winter-flower"><i class="fa fa-check"></i><b>8.3.1</b> A winter flower</a></li>
+<li class="chapter" data-level="8.3.2" data-path="conditional-manatees.html"><a href="conditional-manatees.html#the-models"><i class="fa fa-check"></i><b>8.3.2</b> The models</a></li>
+<li class="chapter" data-level="8.3.3" data-path="conditional-manatees.html"><a href="conditional-manatees.html#plotting-posterior-predictions"><i class="fa fa-check"></i><b>8.3.3</b> Plotting posterior predictions</a></li>
+<li class="chapter" data-level="8.3.4" data-path="conditional-manatees.html"><a href="conditional-manatees.html#plotting-prior-predictions"><i class="fa fa-check"></i><b>8.3.4</b> Plotting prior predictions</a></li>
+</ul></li>
+<li class="chapter" data-level="8.4" data-path="conditional-manatees.html"><a href="conditional-manatees.html#practice-6"><i class="fa fa-check"></i><b>8.4</b> Practice</a>
+<ul>
+<li class="chapter" data-level="8.4.1" data-path="conditional-manatees.html"><a href="conditional-manatees.html#m4-5"><i class="fa fa-check"></i><b>8.4.1</b> 8M4</a></li>
+<li class="chapter" data-level="8.4.2" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h1-6"><i class="fa fa-check"></i><b>8.4.2</b> 8H1</a></li>
+<li class="chapter" data-level="8.4.3" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h2-6"><i class="fa fa-check"></i><b>8.4.3</b> 8H2</a></li>
+<li class="chapter" data-level="8.4.4" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h3-6"><i class="fa fa-check"></i><b>8.4.4</b> 8H3</a></li>
+<li class="chapter" data-level="8.4.5" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h4-6"><i class="fa fa-check"></i><b>8.4.5</b> 8H4</a></li>
+<li class="chapter" data-level="8.4.6" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h5-4"><i class="fa fa-check"></i><b>8.4.6</b> 8H5</a></li>
+<li class="chapter" data-level="8.4.7" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h6-1"><i class="fa fa-check"></i><b>8.4.7</b> 8H6</a></li>
+<li class="chapter" data-level="8.4.8" data-path="conditional-manatees.html"><a href="conditional-manatees.html#h7"><i class="fa fa-check"></i><b>8.4.8</b> 8H7</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="9" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html"><i class="fa fa-check"></i><b>9</b> Marcov Chain Monte Carlo</a>
+<ul>
+<li class="chapter" data-level="9.1" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#good-king-marcov-and-his-island-kingdom"><i class="fa fa-check"></i><b>9.1</b> Good King Marcov and his island kingdom</a></li>
+<li class="chapter" data-level="9.2" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#metropolis-algorythm"><i class="fa fa-check"></i><b>9.2</b> Metropolis algorythm</a>
+<ul>
+<li class="chapter" data-level="9.2.1" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#gibbs-sampling"><i class="fa fa-check"></i><b>9.2.1</b> Gibbs sampling</a></li>
+<li class="chapter" data-level="9.2.2" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#high-dimentional-problem"><i class="fa fa-check"></i><b>9.2.2</b> High-dimentional problem</a></li>
+</ul></li>
+<li class="chapter" data-level="9.3" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#hamiltonian-monte-carlo"><i class="fa fa-check"></i><b>9.3</b> Hamiltonian Monte Carlo</a>
+<ul>
+<li class="chapter" data-level="9.3.1" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#another-probable"><i class="fa fa-check"></i><b>9.3.1</b> Another probable</a></li>
+<li class="chapter" data-level="9.3.2" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#limitations"><i class="fa fa-check"></i><b>9.3.2</b> Limitations</a></li>
+</ul></li>
+<li class="chapter" data-level="9.4" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#easy-hmc-ulam-brm"><i class="fa fa-check"></i><b>9.4</b> Easy HMC: <del>ulam</del> <code>brm()</code></a>
+<ul>
+<li class="chapter" data-level="9.4.1" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#preparation"><i class="fa fa-check"></i><b>9.4.1</b> Preparation</a></li>
+<li class="chapter" data-level="9.4.2" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#sampling-from-posterior"><i class="fa fa-check"></i><b>9.4.2</b> Sampling from posterior</a></li>
+<li class="chapter" data-level="9.4.3" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#sampling-again-in-parallel"><i class="fa fa-check"></i><b>9.4.3</b> Sampling again in parallel</a></li>
+<li class="chapter" data-level="9.4.4" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#visualization"><i class="fa fa-check"></i><b>9.4.4</b> Visualization</a></li>
+<li class="chapter" data-level="9.4.5" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#checking-the-chain"><i class="fa fa-check"></i><b>9.4.5</b> Checking the chain</a></li>
+</ul></li>
+<li class="chapter" data-level="9.5" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#care-and-feeding-of-your-marcov-chain"><i class="fa fa-check"></i><b>9.5</b> Care and feeding of your Marcov chain</a>
+<ul>
+<li class="chapter" data-level="9.5.1" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#how-many-samples-do-you-need"><i class="fa fa-check"></i><b>9.5.1</b> How many samples do you need</a></li>
+<li class="chapter" data-level="9.5.2" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#how-many-chains-do-we-need"><i class="fa fa-check"></i><b>9.5.2</b> How many chains do we need</a></li>
+<li class="chapter" data-level="9.5.3" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#taming-and-wild-chain"><i class="fa fa-check"></i><b>9.5.3</b> Taming and wild chain</a></li>
+<li class="chapter" data-level="9.5.4" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#non-identifiable-parameters"><i class="fa fa-check"></i><b>9.5.4</b> Non-identifiable parameters</a></li>
+</ul></li>
+<li class="chapter" data-level="9.6" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#practice-7"><i class="fa fa-check"></i><b>9.6</b> Practice</a>
+<ul>
+<li class="chapter" data-level="9.6.1" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#m1-5"><i class="fa fa-check"></i><b>9.6.1</b> 9M1</a></li>
+<li class="chapter" data-level="9.6.2" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#m2-5"><i class="fa fa-check"></i><b>9.6.2</b> 9M2</a></li>
+<li class="chapter" data-level="9.6.3" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#m3-2"><i class="fa fa-check"></i><b>9.6.3</b> 9M3</a></li>
+<li class="chapter" data-level="9.6.4" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#h1-7"><i class="fa fa-check"></i><b>9.6.4</b> 9H1</a></li>
+<li class="chapter" data-level="9.6.5" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#h2-7"><i class="fa fa-check"></i><b>9.6.5</b> 9H2</a></li>
+<li class="chapter" data-level="9.6.6" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#h3-7"><i class="fa fa-check"></i><b>9.6.6</b> 9H3</a></li>
+<li class="chapter" data-level="9.6.7" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#h4-7"><i class="fa fa-check"></i><b>9.6.7</b> 9H4</a></li>
+<li class="chapter" data-level="9.6.8" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#h5-5"><i class="fa fa-check"></i><b>9.6.8</b> 9H5</a></li>
+<li class="chapter" data-level="9.6.9" data-path="marcov-chain-monte-carlo.html"><a href="marcov-chain-monte-carlo.html#h6-2"><i class="fa fa-check"></i><b>9.6.9</b> 9H6</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="10" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html"><i class="fa fa-check"></i><b>10</b> Big Entropy and the Generalized Linear Model</a>
+<ul>
+<li class="chapter" data-level="10.1" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#maximum-entropy"><i class="fa fa-check"></i><b>10.1</b> Maximum entropy</a>
+<ul>
+<li class="chapter" data-level="10.1.1" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#gaussian"><i class="fa fa-check"></i><b>10.1.1</b> Gaussian</a></li>
+<li class="chapter" data-level="10.1.2" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#binomial"><i class="fa fa-check"></i><b>10.1.2</b> Binomial</a></li>
+</ul></li>
+<li class="chapter" data-level="10.2" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#generalized-linear-models"><i class="fa fa-check"></i><b>10.2</b> Generalized linear models</a>
+<ul>
+<li class="chapter" data-level="10.2.1" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#meet-the-family"><i class="fa fa-check"></i><b>10.2.1</b> Meet the family</a></li>
+<li class="chapter" data-level="10.2.2" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#linking-linear-models-to-distributions"><i class="fa fa-check"></i><b>10.2.2</b> Linking linear models to distributions</a></li>
+<li class="chapter" data-level="10.2.3" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#overthinking-2"><i class="fa fa-check"></i><b>10.2.3</b> Overthinking</a></li>
+<li class="chapter" data-level="10.2.4" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#omitted-variable-bias-again"><i class="fa fa-check"></i><b>10.2.4</b> Omitted variable bias again</a></li>
+<li class="chapter" data-level="10.2.5" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#absolute-and-relative-differences"><i class="fa fa-check"></i><b>10.2.5</b> Absolute and relative differences</a></li>
+<li class="chapter" data-level="10.2.6" data-path="big-entropy-and-the-generalized-linear-model.html"><a href="big-entropy-and-the-generalized-linear-model.html#glms-and-information-criteria"><i class="fa fa-check"></i><b>10.2.6</b> GLMs and information criteria</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="11" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html"><i class="fa fa-check"></i><b>11</b> God Spiked the Integers</a>
+<ul>
+<li class="chapter" data-level="11.1" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#binomial-regression"><i class="fa fa-check"></i><b>11.1</b> Binomial regression</a>
+<ul>
+<li class="chapter" data-level="11.1.1" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#logistic-regression"><i class="fa fa-check"></i><b>11.1.1</b> Logistic regression</a></li>
+<li class="chapter" data-level="11.1.2" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#relative-shark-and-absolute-deer"><i class="fa fa-check"></i><b>11.1.2</b> Relative shark and absolute deer</a></li>
+<li class="chapter" data-level="11.1.3" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#aggregated-binomial-chimpanzees-again-condensed"><i class="fa fa-check"></i><b>11.1.3</b> Aggregated binomial: Chimpanzees again, condensed</a></li>
+</ul></li>
+<li class="chapter" data-level="11.2" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#aggregated-binomial-graduate-school-admittions."><i class="fa fa-check"></i><b>11.2</b> Aggregated binomial: Graduate school admittions.</a></li>
+<li class="chapter" data-level="11.3" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#poisson-regression"><i class="fa fa-check"></i><b>11.3</b> Poisson regression</a>
+<ul>
+<li class="chapter" data-level="11.3.1" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#oceanic-tool-complexity"><i class="fa fa-check"></i><b>11.3.1</b> Oceanic tool complexity</a></li>
+<li class="chapter" data-level="11.3.2" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#negative-binomial-gamma-poisson-models."><i class="fa fa-check"></i><b>11.3.2</b> Negative binomial (Gamma-Poisson) models.</a></li>
+<li class="chapter" data-level="11.3.3" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#example-exposure-and-the-offset"><i class="fa fa-check"></i><b>11.3.3</b> Example: Exposure and the offset</a></li>
+</ul></li>
+<li class="chapter" data-level="11.4" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#multinomial-and-categorical-models"><i class="fa fa-check"></i><b>11.4</b> Multinomial and categorical models</a>
+<ul>
+<li class="chapter" data-level="11.4.1" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#predictors-matched-to-outcomes"><i class="fa fa-check"></i><b>11.4.1</b> Predictors matched to outcomes</a></li>
+<li class="chapter" data-level="11.4.2" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#predictor-matched-to-observations"><i class="fa fa-check"></i><b>11.4.2</b> Predictor matched to observations</a></li>
+<li class="chapter" data-level="11.4.3" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#multinomial-in-disguise-as-poisson"><i class="fa fa-check"></i><b>11.4.3</b> Multinomial in disguise as Poisson</a></li>
+</ul></li>
+<li class="chapter" data-level="11.5" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#practice-8"><i class="fa fa-check"></i><b>11.5</b> Practice</a>
+<ul>
+<li class="chapter" data-level="11.5.1" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#e1"><i class="fa fa-check"></i><b>11.5.1</b> 11E1</a></li>
+<li class="chapter" data-level="11.5.2" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#e2-1"><i class="fa fa-check"></i><b>11.5.2</b> 11E2</a></li>
+<li class="chapter" data-level="11.5.3" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#e3-1"><i class="fa fa-check"></i><b>11.5.3</b> 11E3</a></li>
+<li class="chapter" data-level="11.5.4" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#e4-1"><i class="fa fa-check"></i><b>11.5.4</b> 11E4</a></li>
+<li class="chapter" data-level="11.5.5" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#m7-2"><i class="fa fa-check"></i><b>11.5.5</b> 11M7</a></li>
+<li class="chapter" data-level="11.5.6" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#m8-1"><i class="fa fa-check"></i><b>11.5.6</b> 11M8</a></li>
+<li class="chapter" data-level="11.5.7" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#h1-8"><i class="fa fa-check"></i><b>11.5.7</b> 11H1</a></li>
+<li class="chapter" data-level="11.5.8" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#h2-8"><i class="fa fa-check"></i><b>11.5.8</b> 11H2</a></li>
+<li class="chapter" data-level="11.5.9" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#h3-8"><i class="fa fa-check"></i><b>11.5.9</b> 11H3</a></li>
+<li class="chapter" data-level="11.5.10" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#h4-8"><i class="fa fa-check"></i><b>11.5.10</b> 11H4</a></li>
+<li class="chapter" data-level="11.5.11" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#h5-6"><i class="fa fa-check"></i><b>11.5.11</b> 11H5</a></li>
+<li class="chapter" data-level="11.5.12" data-path="god-spiked-the-integers.html"><a href="god-spiked-the-integers.html#h6-3"><i class="fa fa-check"></i><b>11.5.12</b> 11H6</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="12" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html"><i class="fa fa-check"></i><b>12</b> Monsters and Mixtures</a>
+<ul>
+<li class="chapter" data-level="12.1" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#over-dispersed-counts"><i class="fa fa-check"></i><b>12.1</b> Over-dispersed counts</a>
+<ul>
+<li class="chapter" data-level="12.1.1" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#beta-binomial."><i class="fa fa-check"></i><b>12.1.1</b> Beta binomial.</a></li>
+<li class="chapter" data-level="12.1.2" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#negative-binomial-or-gamma-poisson."><i class="fa fa-check"></i><b>12.1.2</b> Negative binomial or gamma-Poisson.</a></li>
+<li class="chapter" data-level="12.1.3" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#over-dispersion-entropy-and-information-criteria."><i class="fa fa-check"></i><b>12.1.3</b> Over-dispersion, entropy, and information criteria.</a></li>
+</ul></li>
+<li class="chapter" data-level="12.2" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#zero-inflated-outcomes"><i class="fa fa-check"></i><b>12.2</b> Zero-inflated outcomes</a>
+<ul>
+<li class="chapter" data-level="12.2.1" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#example-zero-inflated-poisson."><i class="fa fa-check"></i><b>12.2.1</b> Example: Zero-inflated Poisson.</a></li>
+</ul></li>
+<li class="chapter" data-level="12.3" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#ordered-categorical-outcomes"><i class="fa fa-check"></i><b>12.3</b> Ordered categorical outcomes</a>
+<ul>
+<li class="chapter" data-level="12.3.1" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#example-moral-intuition."><i class="fa fa-check"></i><b>12.3.1</b> Example: Moral intuition.</a></li>
+<li class="chapter" data-level="12.3.2" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#adding-predictor-variables."><i class="fa fa-check"></i><b>12.3.2</b> Adding predictor variables.</a></li>
+</ul></li>
+<li class="chapter" data-level="12.4" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#ordered-categorical-predictors"><i class="fa fa-check"></i><b>12.4</b> Ordered categorical predictors</a></li>
+<li class="chapter" data-level="12.5" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#practice-9"><i class="fa fa-check"></i><b>12.5</b> Practice</a>
+<ul>
+<li class="chapter" data-level="12.5.1" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#m1-6"><i class="fa fa-check"></i><b>12.5.1</b> 12M1</a></li>
+<li class="chapter" data-level="12.5.2" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#m2-6"><i class="fa fa-check"></i><b>12.5.2</b> 12M2</a></li>
+<li class="chapter" data-level="12.5.3" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#m3-3"><i class="fa fa-check"></i><b>12.5.3</b> 12M3</a></li>
+<li class="chapter" data-level="12.5.4" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h1-9"><i class="fa fa-check"></i><b>12.5.4</b> 12H1</a></li>
+<li class="chapter" data-level="12.5.5" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h2-9"><i class="fa fa-check"></i><b>12.5.5</b> 12H2</a></li>
+<li class="chapter" data-level="12.5.6" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h3-9"><i class="fa fa-check"></i><b>12.5.6</b> 12H3</a></li>
+<li class="chapter" data-level="12.5.7" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h4-9"><i class="fa fa-check"></i><b>12.5.7</b> 12H4</a></li>
+<li class="chapter" data-level="12.5.8" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h5-7"><i class="fa fa-check"></i><b>12.5.8</b> 12H5</a></li>
+<li class="chapter" data-level="12.5.9" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h6-4"><i class="fa fa-check"></i><b>12.5.9</b> 12H6</a></li>
+<li class="chapter" data-level="12.5.10" data-path="monsters-and-mixtures.html"><a href="monsters-and-mixtures.html#h7-1"><i class="fa fa-check"></i><b>12.5.10</b> 12H7</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="13" data-path="models-with-memory.html"><a href="models-with-memory.html"><i class="fa fa-check"></i><b>13</b> Models with Memory</a>
+<ul>
+<li class="chapter" data-level="13.1" data-path="models-with-memory.html"><a href="models-with-memory.html#multilevel-tadpoles"><i class="fa fa-check"></i><b>13.1</b> Multilevel tadpoles</a></li>
+<li class="chapter" data-level="13.2" data-path="models-with-memory.html"><a href="models-with-memory.html#varying-effects-and-the-underfittingoverfitting-trade-off"><i class="fa fa-check"></i><b>13.2</b> Varying effects and the underfitting/overfitting trade-off 　</a>
+<ul>
+<li class="chapter" data-level="13.2.1" data-path="models-with-memory.html"><a href="models-with-memory.html#the-model"><i class="fa fa-check"></i><b>13.2.1</b> The model</a></li>
+<li class="chapter" data-level="13.2.2" data-path="models-with-memory.html"><a href="models-with-memory.html#simulate-survivors"><i class="fa fa-check"></i><b>13.2.2</b> Simulate survivors</a></li>
+</ul></li>
+<li class="chapter" data-level="13.3" data-path="models-with-memory.html"><a href="models-with-memory.html#more-than-one-type-of-cluster"><i class="fa fa-check"></i><b>13.3</b> More than one type of cluster</a>
+<ul>
+<li class="chapter" data-level="13.3.1" data-path="models-with-memory.html"><a href="models-with-memory.html#even-more-clusters"><i class="fa fa-check"></i><b>13.3.1</b> Even more clusters</a></li>
+</ul></li>
+<li class="chapter" data-level="13.4" data-path="models-with-memory.html"><a href="models-with-memory.html#divergent-transitions-and-non-centered-priors"><i class="fa fa-check"></i><b>13.4</b> Divergent transitions and non-centered priors</a>
+<ul>
+<li class="chapter" data-level="13.4.1" data-path="models-with-memory.html"><a href="models-with-memory.html#the-devils-funnel"><i class="fa fa-check"></i><b>13.4.1</b> The Devil’s Funnel</a></li>
+<li class="chapter" data-level="13.4.2" data-path="models-with-memory.html"><a href="models-with-memory.html#non-centered-chimpanzees"><i class="fa fa-check"></i><b>13.4.2</b> Non-centered chimpanzees</a></li>
+</ul></li>
+<li class="chapter" data-level="13.5" data-path="models-with-memory.html"><a href="models-with-memory.html#multilevel-posterior-predictions"><i class="fa fa-check"></i><b>13.5</b> Multilevel posterior predictions</a>
+<ul>
+<li class="chapter" data-level="13.5.1" data-path="models-with-memory.html"><a href="models-with-memory.html#posterior-prediction-for-same-clusters"><i class="fa fa-check"></i><b>13.5.1</b> Posterior prediction for same clusters</a></li>
+<li class="chapter" data-level="13.5.2" data-path="models-with-memory.html"><a href="models-with-memory.html#posterior-prediction-for-new-clusters"><i class="fa fa-check"></i><b>13.5.2</b> Posterior prediction for new clusters</a></li>
+</ul></li>
+<li class="chapter" data-level="13.6" data-path="models-with-memory.html"><a href="models-with-memory.html#post-stratification"><i class="fa fa-check"></i><b>13.6</b> Post stratification</a>
+<ul>
+<li class="chapter" data-level="13.6.1" data-path="models-with-memory.html"><a href="models-with-memory.html#meet-the-data"><i class="fa fa-check"></i><b>13.6.1</b> Meet the data</a></li>
+<li class="chapter" data-level="13.6.2" data-path="models-with-memory.html"><a href="models-with-memory.html#settle-the-mr-part-of-mrp."><i class="fa fa-check"></i><b>13.6.2</b> Settle the MR part of MRP.</a></li>
+<li class="chapter" data-level="13.6.3" data-path="models-with-memory.html"><a href="models-with-memory.html#post-stratify-to-put-the-p-in-mrp."><i class="fa fa-check"></i><b>13.6.3</b> Post-stratify to put the P in MRP.</a></li>
+</ul></li>
+<li class="chapter" data-level="13.7" data-path="models-with-memory.html"><a href="models-with-memory.html#practice-10"><i class="fa fa-check"></i><b>13.7</b> Practice</a>
+<ul>
+<li class="chapter" data-level="13.7.1" data-path="models-with-memory.html"><a href="models-with-memory.html#m1-7"><i class="fa fa-check"></i><b>13.7.1</b> 13M1</a></li>
+<li class="chapter" data-level="13.7.2" data-path="models-with-memory.html"><a href="models-with-memory.html#m2-7"><i class="fa fa-check"></i><b>13.7.2</b> 13M2</a></li>
+<li class="chapter" data-level="13.7.3" data-path="models-with-memory.html"><a href="models-with-memory.html#m3-4"><i class="fa fa-check"></i><b>13.7.3</b> 13M3</a></li>
+<li class="chapter" data-level="13.7.4" data-path="models-with-memory.html"><a href="models-with-memory.html#m4-6"><i class="fa fa-check"></i><b>13.7.4</b> 13M4</a></li>
+<li class="chapter" data-level="13.7.5" data-path="models-with-memory.html"><a href="models-with-memory.html#m5-3"><i class="fa fa-check"></i><b>13.7.5</b> 13M5</a></li>
+<li class="chapter" data-level="13.7.6" data-path="models-with-memory.html"><a href="models-with-memory.html#m6-2"><i class="fa fa-check"></i><b>13.7.6</b> 13M6</a></li>
+<li class="chapter" data-level="13.7.7" data-path="models-with-memory.html"><a href="models-with-memory.html#h1-10"><i class="fa fa-check"></i><b>13.7.7</b> 13H1</a></li>
+<li class="chapter" data-level="13.7.8" data-path="models-with-memory.html"><a href="models-with-memory.html#h2-10"><i class="fa fa-check"></i><b>13.7.8</b> 13H2</a></li>
+<li class="chapter" data-level="13.7.9" data-path="models-with-memory.html"><a href="models-with-memory.html#h3-10"><i class="fa fa-check"></i><b>13.7.9</b> 13H3</a></li>
+<li class="chapter" data-level="13.7.10" data-path="models-with-memory.html"><a href="models-with-memory.html#h4-10"><i class="fa fa-check"></i><b>13.7.10</b> 13H4</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="14" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html"><i class="fa fa-check"></i><b>14</b> Adventures in Covariance</a>
+<ul>
+<li class="chapter" data-level="14.1" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#varying-slopes-by-construction"><i class="fa fa-check"></i><b>14.1</b> Varying slopes by construction</a>
+<ul>
+<li class="chapter" data-level="14.1.1" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#simulate-and-population"><i class="fa fa-check"></i><b>14.1.1</b> Simulate and population</a></li>
+<li class="chapter" data-level="14.1.2" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#simulate-observation"><i class="fa fa-check"></i><b>14.1.2</b> Simulate observation</a></li>
+<li class="chapter" data-level="14.1.3" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#the-varying-slope-model"><i class="fa fa-check"></i><b>14.1.3</b> The varying slope model</a></li>
+</ul></li>
+<li class="chapter" data-level="14.2" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#advanced-varing-slopes"><i class="fa fa-check"></i><b>14.2</b> Advanced varing slopes</a></li>
+<li class="chapter" data-level="14.3" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#instruments-and-causal-designs"><i class="fa fa-check"></i><b>14.3</b> Instruments and causal designs</a>
+<ul>
+<li class="chapter" data-level="14.3.1" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#instrumental-variables"><i class="fa fa-check"></i><b>14.3.1</b> Instrumental variables</a></li>
+<li class="chapter" data-level="14.3.2" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#other-designs"><i class="fa fa-check"></i><b>14.3.2</b> Other designs</a></li>
+</ul></li>
+<li class="chapter" data-level="14.4" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#social-relations-as-correlated-varying-effects"><i class="fa fa-check"></i><b>14.4</b> Social relations as correlated varying effects</a></li>
+<li class="chapter" data-level="14.5" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#continuous-categories-and-the-gaussian-process"><i class="fa fa-check"></i><b>14.5</b> Continuous categories and the Gaussian process</a>
+<ul>
+<li class="chapter" data-level="14.5.1" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#example-spatial-autocorrelation-in-oceanic-tools"><i class="fa fa-check"></i><b>14.5.1</b> Example: Spatial autocorrelation in Oceanic tools</a></li>
+<li class="chapter" data-level="14.5.2" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#example-phylogenetic-distance"><i class="fa fa-check"></i><b>14.5.2</b> Example: Phylogenetic distance</a></li>
+</ul></li>
+<li class="chapter" data-level="14.6" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#practice-11"><i class="fa fa-check"></i><b>14.6</b> Practice</a>
+<ul>
+<li class="chapter" data-level="14.6.1" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#m1-8"><i class="fa fa-check"></i><b>14.6.1</b> 14M1</a></li>
+<li class="chapter" data-level="14.6.2" data-path="adventures-in-covariance.html"><a href="adventures-in-covariance.html#m2-8"><i class="fa fa-check"></i><b>14.6.2</b> 14M2</a></li>
+</ul></li>
+</ul></li>
+<li class="chapter" data-level="" data-path="実行環境.html"><a href="実行環境.html"><i class="fa fa-check"></i>実行環境</a></li>
+</ul>
+
+      </nav>
+    </div>
+
+    <div class="book-body">
+      <div class="body-inner">
+        <div class="book-header" role="navigation">
+          <h1>
+            <i class="fa fa-circle-o-notch fa-spin"></i><a href="./">Statistical Rethinking Second Edition</a>
+          </h1>
+        </div>
+
+        <div class="page-wrapper" tabindex="-1" role="main">
+          <div class="page-inner">
+
+            <section class="normal" id="section-">
+<div id="small-worlds-and-large-worlds" class="section level1 hasAnchor" number="2">
+<h1><span class="header-section-number">2</span> Small Worlds and Large Worlds<a href="small-worlds-and-large-worlds.html#small-worlds-and-large-worlds" class="anchor-section" aria-label="Anchor link to header"></a></h1>
+<div id="byesian-updating" class="section level2 hasAnchor" number="2.1">
+<h2><span class="header-section-number">2.1</span> Byesian Updating<a href="small-worlds-and-large-worlds.html#byesian-updating" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<p>地球儀の例について、逐次更新をシミュレート</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="small-worlds-and-large-worlds.html#cb2-1" aria-hidden="true" tabindex="-1"></a>(d <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">toss =</span> <span class="fu">c</span>(<span class="st">&quot;w&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;w&quot;</span>, <span class="st">&quot;w&quot;</span>, <span class="st">&quot;w&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;w&quot;</span>, <span class="st">&quot;l&quot;</span>, <span class="st">&quot;w&quot;</span>)))</span></code></pre></div>
+<pre><code>## # A tibble: 9 × 1
+##   toss 
+##   &lt;chr&gt;
+## 1 w    
+## 2 l    
+## 3 w    
+## 4 w    
+## 5 w    
+## 6 l    
+## 7 w    
+## 8 l    
+## 9 w</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="small-worlds-and-large-worlds.html#cb4-1" aria-hidden="true" tabindex="-1"></a>(d <span class="ot">&lt;-</span> </span>
+<span id="cb4-2"><a href="small-worlds-and-large-worlds.html#cb4-2" aria-hidden="true" tabindex="-1"></a>    d <span class="sc">%&gt;%</span> </span>
+<span id="cb4-3"><a href="small-worlds-and-large-worlds.html#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">n_trials =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">9</span>,</span>
+<span id="cb4-4"><a href="small-worlds-and-large-worlds.html#cb4-4" aria-hidden="true" tabindex="-1"></a>           <span class="at">n_success =</span> <span class="fu">cumsum</span>(toss<span class="sc">==</span><span class="st">&quot;w&quot;</span>)))</span></code></pre></div>
+<pre><code>## # A tibble: 9 × 3
+##   toss  n_trials n_success
+##   &lt;chr&gt;    &lt;int&gt;     &lt;int&gt;
+## 1 w            1         1
+## 2 l            2         1
+## 3 w            3         2
+## 4 w            4         3
+## 5 w            5         4
+## 6 l            6         4
+## 7 w            7         5
+## 8 l            8         5
+## 9 w            9         6</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="small-worlds-and-large-worlds.html#cb6-1" aria-hidden="true" tabindex="-1"></a>sequence_length <span class="ot">&lt;-</span> <span class="dv">50</span></span>
+<span id="cb6-2"><a href="small-worlds-and-large-worlds.html#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="small-worlds-and-large-worlds.html#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 各トライアルごとに横軸を追加</span></span>
+<span id="cb6-4"><a href="small-worlds-and-large-worlds.html#cb6-4" aria-hidden="true" tabindex="-1"></a>d <span class="sc">%&gt;%</span> </span>
+<span id="cb6-5"><a href="small-worlds-and-large-worlds.html#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">expand</span>(<span class="fu">nesting</span>(n_trials, toss, n_success), </span>
+<span id="cb6-6"><a href="small-worlds-and-large-worlds.html#cb6-6" aria-hidden="true" tabindex="-1"></a>         <span class="at">p_water =</span> <span class="fu">seq</span>(<span class="at">from =</span> <span class="dv">0</span>, <span class="at">to =</span> <span class="dv">1</span>, <span class="at">length.out =</span> sequence_length)) <span class="ot">-&gt;</span>d2</span>
+<span id="cb6-7"><a href="small-worlds-and-large-worlds.html#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="small-worlds-and-large-worlds.html#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 1つ前のtrialの番号と成功数を追加</span></span>
+<span id="cb6-9"><a href="small-worlds-and-large-worlds.html#cb6-9" aria-hidden="true" tabindex="-1"></a>d2 <span class="sc">%&gt;%</span></span>
+<span id="cb6-10"><a href="small-worlds-and-large-worlds.html#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(p_water) <span class="sc">%&gt;%</span> </span>
+<span id="cb6-11"><a href="small-worlds-and-large-worlds.html#cb6-11" aria-hidden="true" tabindex="-1"></a>   <span class="fu">mutate</span>(<span class="at">lagged_n_trials  =</span> <span class="fu">lag</span>(n_trials, <span class="at">k =</span> <span class="dv">1</span>),</span>
+<span id="cb6-12"><a href="small-worlds-and-large-worlds.html#cb6-12" aria-hidden="true" tabindex="-1"></a>         <span class="at">lagged_n_success =</span> <span class="fu">lag</span>(n_success, <span class="at">k =</span> <span class="dv">1</span>))<span class="ot">-&gt;</span> d3 </span>
+<span id="cb6-13"><a href="small-worlds-and-large-worlds.html#cb6-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-14"><a href="small-worlds-and-large-worlds.html#cb6-14" aria-hidden="true" tabindex="-1"></a><span class="co"># 尤度を計算</span></span>
+<span id="cb6-15"><a href="small-worlds-and-large-worlds.html#cb6-15" aria-hidden="true" tabindex="-1"></a>d3 <span class="sc">%&gt;%</span> </span>
+<span id="cb6-16"><a href="small-worlds-and-large-worlds.html#cb6-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ungroup</span>() <span class="sc">%&gt;%</span> </span>
+<span id="cb6-17"><a href="small-worlds-and-large-worlds.html#cb6-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prior =</span> <span class="fu">ifelse</span>(n_trials <span class="sc">==</span> <span class="dv">1</span>, .<span class="dv">5</span>,</span>
+<span id="cb6-18"><a href="small-worlds-and-large-worlds.html#cb6-18" aria-hidden="true" tabindex="-1"></a>                        <span class="fu">dbinom</span>(<span class="at">x=</span>lagged_n_success, </span>
+<span id="cb6-19"><a href="small-worlds-and-large-worlds.html#cb6-19" aria-hidden="true" tabindex="-1"></a>                               <span class="at">size =</span>lagged_n_trials, </span>
+<span id="cb6-20"><a href="small-worlds-and-large-worlds.html#cb6-20" aria-hidden="true" tabindex="-1"></a>                               <span class="at">prob =</span> p_water)),</span>
+<span id="cb6-21"><a href="small-worlds-and-large-worlds.html#cb6-21" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood =</span> <span class="fu">dbinom</span>(<span class="at">x    =</span> n_success, </span>
+<span id="cb6-22"><a href="small-worlds-and-large-worlds.html#cb6-22" aria-hidden="true" tabindex="-1"></a>                             <span class="at">size =</span> n_trials, </span>
+<span id="cb6-23"><a href="small-worlds-and-large-worlds.html#cb6-23" aria-hidden="true" tabindex="-1"></a>                             <span class="at">prob =</span> p_water),</span>
+<span id="cb6-24"><a href="small-worlds-and-large-worlds.html#cb6-24" aria-hidden="true" tabindex="-1"></a>         <span class="at">strip      =</span> <span class="fu">str_c</span>(<span class="st">&quot;n = &quot;</span>, n_trials)) <span class="ot">-&gt;</span> d4</span>
+<span id="cb6-25"><a href="small-worlds-and-large-worlds.html#cb6-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-26"><a href="small-worlds-and-large-worlds.html#cb6-26" aria-hidden="true" tabindex="-1"></a><span class="co"># 尤度のスケールを変更</span></span>
+<span id="cb6-27"><a href="small-worlds-and-large-worlds.html#cb6-27" aria-hidden="true" tabindex="-1"></a>d4 <span class="sc">%&gt;%</span>  </span>
+<span id="cb6-28"><a href="small-worlds-and-large-worlds.html#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(n_trials) <span class="sc">%&gt;%</span> </span>
+<span id="cb6-29"><a href="small-worlds-and-large-worlds.html#cb6-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prior =</span> prior <span class="sc">/</span> <span class="fu">sum</span>(prior),</span>
+<span id="cb6-30"><a href="small-worlds-and-large-worlds.html#cb6-30" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood =</span> likelihood <span class="sc">/</span> <span class="fu">sum</span>(likelihood)) <span class="ot">-&gt;</span>d5   </span>
+<span id="cb6-31"><a href="small-worlds-and-large-worlds.html#cb6-31" aria-hidden="true" tabindex="-1"></a><span class="co"># 描画</span></span>
+<span id="cb6-32"><a href="small-worlds-and-large-worlds.html#cb6-32" aria-hidden="true" tabindex="-1"></a>d5 <span class="sc">%&gt;%</span> </span>
+<span id="cb6-33"><a href="small-worlds-and-large-worlds.html#cb6-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> p_water)) <span class="sc">+</span></span>
+<span id="cb6-34"><a href="small-worlds-and-large-worlds.html#cb6-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y =</span> prior), </span>
+<span id="cb6-35"><a href="small-worlds-and-large-worlds.html#cb6-35" aria-hidden="true" tabindex="-1"></a>            <span class="at">linetype =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb6-36"><a href="small-worlds-and-large-worlds.html#cb6-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y =</span> likelihood))<span class="sc">+</span></span>
+<span id="cb6-37"><a href="small-worlds-and-large-worlds.html#cb6-37" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="st">&quot;proportion water&quot;</span>, <span class="at">breaks =</span> <span class="fu">c</span>(<span class="dv">0</span>, .<span class="dv">5</span>, <span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb6-38"><a href="small-worlds-and-large-worlds.html#cb6-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="st">&quot;plausibility&quot;</span>, <span class="at">breaks =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
+<span id="cb6-39"><a href="small-worlds-and-large-worlds.html#cb6-39" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">panel.grid =</span> <span class="fu">element_blank</span>()) <span class="sc">+</span></span>
+<span id="cb6-40"><a href="small-worlds-and-large-worlds.html#cb6-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> strip, <span class="at">scale=</span><span class="st">&quot;free_y&quot;</span>)</span></code></pre></div>
+<p><img src="Rethinking_Bookdown_files/figure-html/unnamed-chunk-3-1.png" width="672" style="display: block; margin: auto;" />
+<br /></p>
+</div>
+<div id="making-th-model" class="section level2 hasAnchor" number="2.2">
+<h2><span class="header-section-number">2.2</span> Making th model<a href="small-worlds-and-large-worlds.html#making-th-model" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="grid-approximation" class="section level3 hasAnchor" number="2.2.1">
+<h3><span class="header-section-number">2.2.1</span> Grid approximation<a href="small-worlds-and-large-worlds.html#grid-approximation" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="small-worlds-and-large-worlds.html#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(<span class="at">n_points =</span> <span class="fu">c</span>(<span class="dv">5</span>,<span class="dv">20</span>)) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-2"><a href="small-worlds-and-large-worlds.html#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">p_grid =</span> purrr<span class="sc">::</span><span class="fu">map</span>(n_points, <span class="sc">~</span><span class="fu">seq</span>(<span class="dv">0</span>,<span class="dv">1</span>,<span class="at">length.out=</span>.))) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-3"><a href="small-worlds-and-large-worlds.html#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">unnest</span>(p_grid) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-4"><a href="small-worlds-and-large-worlds.html#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">expand</span>(<span class="fu">nesting</span>(n_points,p_grid),</span>
+<span id="cb7-5"><a href="small-worlds-and-large-worlds.html#cb7-5" aria-hidden="true" tabindex="-1"></a>         <span class="at">priors =</span> <span class="fu">c</span>(<span class="st">&quot;ifelse(p_grid &lt; 0.5, 0, 1)&quot;</span>,</span>
+<span id="cb7-6"><a href="small-worlds-and-large-worlds.html#cb7-6" aria-hidden="true" tabindex="-1"></a>                    <span class="st">&quot;exp(-5*abs(p_grid - 0.5))&quot;</span>)) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-7"><a href="small-worlds-and-large-worlds.html#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prior =</span> <span class="fu">ifelse</span>(priors <span class="sc">==</span> <span class="st">&quot;ifelse(p_grid &lt; 0.5, 0, 1)&quot;</span>, </span>
+<span id="cb7-8"><a href="small-worlds-and-large-worlds.html#cb7-8" aria-hidden="true" tabindex="-1"></a>                        <span class="fu">ifelse</span>(p_grid <span class="sc">&lt;</span> <span class="fl">0.5</span>, <span class="dv">0</span>, <span class="dv">1</span>),</span>
+<span id="cb7-9"><a href="small-worlds-and-large-worlds.html#cb7-9" aria-hidden="true" tabindex="-1"></a>                        <span class="fu">exp</span>(<span class="sc">-</span><span class="dv">5</span> <span class="sc">*</span> <span class="fu">abs</span>(p_grid <span class="sc">-</span> <span class="fl">0.5</span>)))) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-10"><a href="small-worlds-and-large-worlds.html#cb7-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">likelihood =</span> <span class="fu">dbinom</span>(<span class="dv">6</span>,<span class="dv">9</span>,<span class="at">prob =</span> p_grid)) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-11"><a href="small-worlds-and-large-worlds.html#cb7-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">posterior =</span> likelihood<span class="sc">*</span>prior <span class="sc">/</span> <span class="fu">sum</span>(likelihood<span class="sc">*</span>prior)) <span class="sc">%&gt;%</span> </span>
+<span id="cb7-12"><a href="small-worlds-and-large-worlds.html#cb7-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>p_grid,<span class="at">y=</span>posterior))<span class="sc">+</span></span>
+<span id="cb7-13"><a href="small-worlds-and-large-worlds.html#cb7-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>()<span class="sc">+</span></span>
+<span id="cb7-14"><a href="small-worlds-and-large-worlds.html#cb7-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>()<span class="sc">+</span></span>
+<span id="cb7-15"><a href="small-worlds-and-large-worlds.html#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">panel.grid =</span> <span class="fu">element_blank</span>())<span class="sc">+</span></span>
+<span id="cb7-16"><a href="small-worlds-and-large-worlds.html#cb7-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_grid</span>(n_points <span class="sc">~</span> priors, <span class="at">scale =</span> <span class="st">&quot;free&quot;</span>)</span></code></pre></div>
+<p><img src="Rethinking_Bookdown_files/figure-html/unnamed-chunk-4-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+<div id="quadratic-approximation" class="section level3 hasAnchor" number="2.2.2">
+<h3><span class="header-section-number">2.2.2</span> Quadratic approximation<a href="small-worlds-and-large-worlds.html#quadratic-approximation" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="small-worlds-and-large-worlds.html#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(rethinking)</span>
+<span id="cb8-2"><a href="small-worlds-and-large-worlds.html#cb8-2" aria-hidden="true" tabindex="-1"></a> <span class="co">#globe.qa &lt;- quap(</span></span>
+<span id="cb8-3"><a href="small-worlds-and-large-worlds.html#cb8-3" aria-hidden="true" tabindex="-1"></a>   <span class="co">#alist(</span></span>
+<span id="cb8-4"><a href="small-worlds-and-large-worlds.html#cb8-4" aria-hidden="true" tabindex="-1"></a>     <span class="co">#W ~ dbinom(W+L,p),</span></span>
+<span id="cb8-5"><a href="small-worlds-and-large-worlds.html#cb8-5" aria-hidden="true" tabindex="-1"></a>     <span class="co">#p ~ dunif(0,1)</span></span>
+<span id="cb8-6"><a href="small-worlds-and-large-worlds.html#cb8-6" aria-hidden="true" tabindex="-1"></a>   <span class="co">#),</span></span>
+<span id="cb8-7"><a href="small-worlds-and-large-worlds.html#cb8-7" aria-hidden="true" tabindex="-1"></a>   <span class="co">#data = list(W=6, L =3))</span></span>
+<span id="cb8-8"><a href="small-worlds-and-large-worlds.html#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="small-worlds-and-large-worlds.html#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="co">#precis(globe.qa)</span></span></code></pre></div>
+</div>
+<div id="mcmc" class="section level3 hasAnchor" number="2.2.3">
+<h3><span class="header-section-number">2.2.3</span> MCMC<a href="small-worlds-and-large-worlds.html#mcmc" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<p>MCMCをもちいて推定してみる。</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="small-worlds-and-large-worlds.html#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(brms)</span>
+<span id="cb9-2"><a href="small-worlds-and-large-worlds.html#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="small-worlds-and-large-worlds.html#cb9-3" aria-hidden="true" tabindex="-1"></a>b2<span class="fl">.1</span> <span class="ot">&lt;-</span> </span>
+<span id="cb9-4"><a href="small-worlds-and-large-worlds.html#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">brm</span>(<span class="at">data =</span> <span class="fu">list</span>(<span class="at">W =</span> <span class="dv">24</span>),</span>
+<span id="cb9-5"><a href="small-worlds-and-large-worlds.html#cb9-5" aria-hidden="true" tabindex="-1"></a>      <span class="at">family =</span> <span class="fu">binomial</span>(<span class="at">link=</span><span class="st">&quot;identity&quot;</span>),</span>
+<span id="cb9-6"><a href="small-worlds-and-large-worlds.html#cb9-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">formula =</span> W<span class="sc">|</span><span class="fu">trials</span>(<span class="dv">36</span>) <span class="sc">~</span> <span class="dv">0</span><span class="sc">+</span>Intercept,</span>
+<span id="cb9-7"><a href="small-worlds-and-large-worlds.html#cb9-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">prior =</span> <span class="fu">prior</span>(<span class="fu">beta</span>(<span class="dv">1</span>,<span class="dv">1</span>),<span class="at">class =</span> <span class="st">&quot;b&quot;</span>, <span class="at">lb =</span> <span class="dv">0</span>, <span class="at">ub =</span><span class="dv">1</span>),</span>
+<span id="cb9-8"><a href="small-worlds-and-large-worlds.html#cb9-8" aria-hidden="true" tabindex="-1"></a>      <span class="at">backend =</span> <span class="st">&quot;cmdstanr&quot;</span>,</span>
+<span id="cb9-9"><a href="small-worlds-and-large-worlds.html#cb9-9" aria-hidden="true" tabindex="-1"></a>      <span class="at">file =</span> <span class="st">&quot;output/Chapter2/b2.1&quot;</span>,</span>
+<span id="cb9-10"><a href="small-worlds-and-large-worlds.html#cb9-10" aria-hidden="true" tabindex="-1"></a>      <span class="at">seed =</span><span class="dv">123</span>)</span></code></pre></div>
+<p>推定結果は以下の通り。</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="small-worlds-and-large-worlds.html#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(b2<span class="fl">.1</span>)</span></code></pre></div>
+<pre><code>##  Family: binomial 
+##   Links: mu = identity 
+## Formula: W | trials(36) ~ 0 + Intercept 
+##    Data: list(W = 24) (Number of observations: 1) 
+##   Draws: 4 chains, each with iter = 2000; warmup = 1000; thin = 1;
+##          total post-warmup draws = 4000
+## 
+## Population-Level Effects: 
+##           Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+## Intercept     0.66      0.08     0.50     0.80 1.00     1658     1849
+## 
+## Draws were sampled using sample(hmc). For each parameter, Bulk_ESS
+## and Tail_ESS are effective sample size measures, and Rhat is the potential
+## scale reduction factor on split chains (at convergence, Rhat = 1).</code></pre>
+<p>事後分布は以下の通り。</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="small-worlds-and-large-worlds.html#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">posterior_samples</span>(b2<span class="fl">.1</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb12-2"><a href="small-worlds-and-large-worlds.html#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>b_Intercept))<span class="sc">+</span></span>
+<span id="cb12-3"><a href="small-worlds-and-large-worlds.html#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density</span>(<span class="at">fill=</span><span class="st">&quot;black&quot;</span>)<span class="sc">+</span></span>
+<span id="cb12-4"><a href="small-worlds-and-large-worlds.html#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">panel.grid=</span><span class="fu">element_blank</span>())</span></code></pre></div>
+<p><img src="Rethinking_Bookdown_files/figure-html/unnamed-chunk-8-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="practice" class="section level2 hasAnchor" number="2.3">
+<h2><span class="header-section-number">2.3</span> Practice<a href="small-worlds-and-large-worlds.html#practice" class="anchor-section" aria-label="Anchor link to header"></a></h2>
+<div id="m1" class="section level3 hasAnchor" number="2.3.1">
+<h3><span class="header-section-number">2.3.1</span> 2M1<a href="small-worlds-and-large-worlds.html#m1" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p. (1) W, W, W (2) W, W, W, L (3) L, W, W, L, W, W, W</p>
+</blockquote>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="small-worlds-and-large-worlds.html#cb13-1" aria-hidden="true" tabindex="-1"></a>dist <span class="ot">&lt;-</span> </span>
+<span id="cb13-2"><a href="small-worlds-and-large-worlds.html#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(<span class="at">p_grid =</span> <span class="fu">seq</span>(<span class="dv">0</span>,<span class="dv">1</span>,<span class="at">length.out =</span> <span class="dv">30</span>)) <span class="sc">%&gt;%</span> </span>
+<span id="cb13-3"><a href="small-worlds-and-large-worlds.html#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prior =</span> <span class="fu">rep</span>(<span class="dv">1</span>,<span class="dv">30</span>),</span>
+<span id="cb13-4"><a href="small-worlds-and-large-worlds.html#cb13-4" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood_1 =</span> <span class="fu">dbinom</span>(<span class="dv">3</span>,<span class="dv">3</span>,p_grid),</span>
+<span id="cb13-5"><a href="small-worlds-and-large-worlds.html#cb13-5" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood_2 =</span> <span class="fu">dbinom</span>(<span class="dv">3</span>,<span class="dv">4</span>,p_grid),</span>
+<span id="cb13-6"><a href="small-worlds-and-large-worlds.html#cb13-6" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood_3 =</span> <span class="fu">dbinom</span>(<span class="dv">5</span>,<span class="dv">7</span>,p_grid),</span>
+<span id="cb13-7"><a href="small-worlds-and-large-worlds.html#cb13-7" aria-hidden="true" tabindex="-1"></a>         <span class="fu">across</span>(<span class="fu">starts_with</span>(<span class="st">&quot;likelihood&quot;</span>), <span class="sc">~</span> .x <span class="sc">*</span> prior),</span>
+<span id="cb13-8"><a href="small-worlds-and-large-worlds.html#cb13-8" aria-hidden="true" tabindex="-1"></a>         <span class="fu">across</span>(<span class="fu">starts_with</span>(<span class="st">&quot;likelihood&quot;</span>), <span class="sc">~</span> .x <span class="sc">/</span> <span class="fu">sum</span>(.x))) <span class="sc">%&gt;%</span> </span>
+<span id="cb13-9"><a href="small-worlds-and-large-worlds.html#cb13-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">starts_with</span>(<span class="st">&quot;likelihood&quot;</span>),<span class="at">names_to =</span> <span class="st">&quot;pattern&quot;</span>, <span class="at">values_to =</span> <span class="st">&quot;posterior&quot;</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb13-10"><a href="small-worlds-and-large-worlds.html#cb13-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(pattern) <span class="sc">%&gt;%</span> </span>
+<span id="cb13-11"><a href="small-worlds-and-large-worlds.html#cb13-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">separate</span>(pattern, <span class="fu">c</span>(<span class="cn">NA</span>, <span class="st">&quot;pattern&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>, <span class="at">convert =</span> <span class="cn">TRUE</span>) <span class="sc">%&gt;%</span> </span>
+<span id="cb13-12"><a href="small-worlds-and-large-worlds.html#cb13-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">obs =</span> <span class="fu">case_when</span>(pattern <span class="sc">==</span> 1L <span class="sc">~</span> <span class="st">&quot;W,W,L&quot;</span>,</span>
+<span id="cb13-13"><a href="small-worlds-and-large-worlds.html#cb13-13" aria-hidden="true" tabindex="-1"></a>                         pattern <span class="sc">==</span> 2L <span class="sc">~</span> <span class="st">&quot;W,W,W,L&quot;</span>,</span>
+<span id="cb13-14"><a href="small-worlds-and-large-worlds.html#cb13-14" aria-hidden="true" tabindex="-1"></a>                         pattern <span class="sc">==</span> 3L <span class="sc">~</span> <span class="st">&quot; L,W,W,L,W,W,W&quot;</span>)) </span>
+<span id="cb13-15"><a href="small-worlds-and-large-worlds.html#cb13-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-16"><a href="small-worlds-and-large-worlds.html#cb13-16" aria-hidden="true" tabindex="-1"></a>dist <span class="sc">%&gt;%</span> </span>
+<span id="cb13-17"><a href="small-worlds-and-large-worlds.html#cb13-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x=</span>p_grid,<span class="at">y=</span>posterior))<span class="sc">+</span></span>
+<span id="cb13-18"><a href="small-worlds-and-large-worlds.html#cb13-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>()<span class="sc">+</span></span>
+<span id="cb13-19"><a href="small-worlds-and-large-worlds.html#cb13-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>()<span class="sc">+</span></span>
+<span id="cb13-20"><a href="small-worlds-and-large-worlds.html#cb13-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">panel.grid =</span> <span class="fu">element_blank</span>())<span class="sc">+</span></span>
+<span id="cb13-21"><a href="small-worlds-and-large-worlds.html#cb13-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="st">&quot;probability&quot;</span>)<span class="sc">+</span></span>
+<span id="cb13-22"><a href="small-worlds-and-large-worlds.html#cb13-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="fu">vars</span>(<span class="fu">fct_inorder</span>(obs)),<span class="at">nrow=</span><span class="dv">1</span>)</span></code></pre></div>
+<p><img src="Rethinking_Bookdown_files/figure-html/unnamed-chunk-9-1.png" width="672" style="display: block; margin: auto;" />
+<br/></p>
+</div>
+<div id="m2" class="section level3 hasAnchor" number="2.3.2">
+<h3><span class="header-section-number">2.3.2</span> 2M2<a href="small-worlds-and-large-worlds.html#m2" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Now assume a prior for p that is equal to zero when p &lt; 0.5 and is a positive constant when p ≥ 0.5. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.</p>
+</blockquote>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="small-worlds-and-large-worlds.html#cb14-1" aria-hidden="true" tabindex="-1"></a>dist <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">p_grid =</span> <span class="fu">seq</span>(<span class="at">from =</span> <span class="dv">0</span>, <span class="at">to =</span> <span class="dv">1</span>, <span class="at">length.out =</span> <span class="dv">20</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb14-2"><a href="small-worlds-and-large-worlds.html#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">prior =</span> <span class="fu">case_when</span>(p_grid <span class="sc">&lt;</span> <span class="fl">0.5</span> <span class="sc">~</span> 0L,</span>
+<span id="cb14-3"><a href="small-worlds-and-large-worlds.html#cb14-3" aria-hidden="true" tabindex="-1"></a>                           <span class="cn">TRUE</span> <span class="sc">~</span> 1L),</span>
+<span id="cb14-4"><a href="small-worlds-and-large-worlds.html#cb14-4" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood_1 =</span> <span class="fu">dbinom</span>(<span class="dv">3</span>, <span class="at">size =</span> <span class="dv">3</span>, <span class="at">prob =</span> p_grid),</span>
+<span id="cb14-5"><a href="small-worlds-and-large-worlds.html#cb14-5" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood_2 =</span> <span class="fu">dbinom</span>(<span class="dv">3</span>, <span class="at">size =</span> <span class="dv">4</span>, <span class="at">prob =</span> p_grid),</span>
+<span id="cb14-6"><a href="small-worlds-and-large-worlds.html#cb14-6" aria-hidden="true" tabindex="-1"></a>         <span class="at">likelihood_3 =</span> <span class="fu">dbinom</span>(<span class="dv">5</span>, <span class="at">size =</span> <span class="dv">7</span>, <span class="at">prob =</span> p_grid),</span>
+<span id="cb14-7"><a href="small-worlds-and-large-worlds.html#cb14-7" aria-hidden="true" tabindex="-1"></a>         <span class="fu">across</span>(<span class="fu">starts_with</span>(<span class="st">&quot;likelihood&quot;</span>), <span class="sc">~</span> .x <span class="sc">*</span> prior),</span>
+<span id="cb14-8"><a href="small-worlds-and-large-worlds.html#cb14-8" aria-hidden="true" tabindex="-1"></a>         <span class="fu">across</span>(<span class="fu">starts_with</span>(<span class="st">&quot;likelihood&quot;</span>), <span class="sc">~</span> .x <span class="sc">/</span> <span class="fu">sum</span>(.x))) <span class="sc">%&gt;%</span></span>
+<span id="cb14-9"><a href="small-worlds-and-large-worlds.html#cb14-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="at">cols =</span> <span class="fu">starts_with</span>(<span class="st">&quot;likelihood&quot;</span>), <span class="at">names_to =</span> <span class="st">&quot;pattern&quot;</span>,</span>
+<span id="cb14-10"><a href="small-worlds-and-large-worlds.html#cb14-10" aria-hidden="true" tabindex="-1"></a>               <span class="at">values_to =</span> <span class="st">&quot;posterior&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb14-11"><a href="small-worlds-and-large-worlds.html#cb14-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">separate</span>(pattern, <span class="fu">c</span>(<span class="cn">NA</span>, <span class="st">&quot;pattern&quot;</span>), <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>, <span class="at">convert =</span> <span class="cn">TRUE</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb14-12"><a href="small-worlds-and-large-worlds.html#cb14-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">obs =</span> <span class="fu">case_when</span>(pattern <span class="sc">==</span> 1L <span class="sc">~</span> <span class="st">&quot;W, W, W&quot;</span>,</span>
+<span id="cb14-13"><a href="small-worlds-and-large-worlds.html#cb14-13" aria-hidden="true" tabindex="-1"></a>                         pattern <span class="sc">==</span> 2L <span class="sc">~</span> <span class="st">&quot;W, W, W, L&quot;</span>,</span>
+<span id="cb14-14"><a href="small-worlds-and-large-worlds.html#cb14-14" aria-hidden="true" tabindex="-1"></a>                         pattern <span class="sc">==</span> 3L <span class="sc">~</span> <span class="st">&quot;L, W, W, L, W, W, W&quot;</span>))</span>
+<span id="cb14-15"><a href="small-worlds-and-large-worlds.html#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-16"><a href="small-worlds-and-large-worlds.html#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(dist, <span class="fu">aes</span>(<span class="at">x =</span> p_grid, <span class="at">y =</span> posterior)) <span class="sc">+</span></span>
+<span id="cb14-17"><a href="small-worlds-and-large-worlds.html#cb14-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="fu">vars</span>(<span class="fu">fct_inorder</span>(obs)), <span class="at">nrow =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb14-18"><a href="small-worlds-and-large-worlds.html#cb14-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>() <span class="sc">+</span></span>
+<span id="cb14-19"><a href="small-worlds-and-large-worlds.html#cb14-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb14-20"><a href="small-worlds-and-large-worlds.html#cb14-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">&quot;Proportion Water (p)&quot;</span>, <span class="at">y =</span> <span class="st">&quot;Posterior Density&quot;</span>)</span></code></pre></div>
+<p><img src="Rethinking_Bookdown_files/figure-html/unnamed-chunk-10-1.png" width="672" style="display: block; margin: auto;" />
+<br/></p>
+</div>
+<div id="m3" class="section level3 hasAnchor" number="2.3.3">
+<h3><span class="header-section-number">2.3.3</span> 2M3<a href="small-worlds-and-large-worlds.html#m3" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Suppose there are two globes, one for Earth and one for Mars. The Earth globe is 70% covered in water. The Mars globe is 100% land. Further suppose that one of these globes—you don’t know which—was tossed in the air and produced a “land” observatiion. Assume that each globe was equally likely to be tossed. Show that the posterior probability that the globe was the Earth, conditional on seeing “land” (Pr(Earth|land)), is 0.23.</p>
+</blockquote>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="small-worlds-and-large-worlds.html#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of land, given Earth</span></span>
+<span id="cb15-2"><a href="small-worlds-and-large-worlds.html#cb15-2" aria-hidden="true" tabindex="-1"></a>p_le <span class="ot">&lt;-</span> <span class="fl">0.3</span></span>
+<span id="cb15-3"><a href="small-worlds-and-large-worlds.html#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="small-worlds-and-large-worlds.html#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of land, given Mars</span></span>
+<span id="cb15-5"><a href="small-worlds-and-large-worlds.html#cb15-5" aria-hidden="true" tabindex="-1"></a>p_lm <span class="ot">&lt;-</span> <span class="fl">1.0</span></span>
+<span id="cb15-6"><a href="small-worlds-and-large-worlds.html#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="small-worlds-and-large-worlds.html#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of Earth</span></span>
+<span id="cb15-8"><a href="small-worlds-and-large-worlds.html#cb15-8" aria-hidden="true" tabindex="-1"></a>p_e <span class="ot">&lt;-</span> <span class="fl">0.5</span></span>
+<span id="cb15-9"><a href="small-worlds-and-large-worlds.html#cb15-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-10"><a href="small-worlds-and-large-worlds.html#cb15-10" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of land</span></span>
+<span id="cb15-11"><a href="small-worlds-and-large-worlds.html#cb15-11" aria-hidden="true" tabindex="-1"></a>p_l <span class="ot">&lt;-</span> (p_e <span class="sc">*</span> p_le) <span class="sc">+</span> ((<span class="dv">1</span> <span class="sc">-</span> p_e) <span class="sc">*</span> p_lm)</span>
+<span id="cb15-12"><a href="small-worlds-and-large-worlds.html#cb15-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-13"><a href="small-worlds-and-large-worlds.html#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of Earth, given land (using Bayes&#39; Theorem)</span></span>
+<span id="cb15-14"><a href="small-worlds-and-large-worlds.html#cb15-14" aria-hidden="true" tabindex="-1"></a>p_el <span class="ot">&lt;-</span> (p_le <span class="sc">*</span> p_e) <span class="sc">/</span> p_l</span>
+<span id="cb15-15"><a href="small-worlds-and-large-worlds.html#cb15-15" aria-hidden="true" tabindex="-1"></a>p_el</span></code></pre></div>
+<pre><code>## [1] 0.2307692</code></pre>
+</div>
+<div id="m4" class="section level3 hasAnchor" number="2.3.4">
+<h3><span class="header-section-number">2.3.4</span> 2M4<a href="small-worlds-and-large-worlds.html#m4" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Suppose you have a deck with only three cards. Each card has only two sides, and each side is either black or white. One card has two black sides. The second card has one black and one white side. The third card has two white sides. Now suppose all three cards are placed in a bag and shuffled. Someone reaches into the bag and pulls out a card and places it flat on a table. A black side is shown facing up, but you don’t know the color of the side facing down. Show that the probability that the other side is also black is 2/3. Use the counting method (Section 2 of the chapter) to approach this problem. This means counting up the ways that each card could produce the observed data (a black side faceing up on the table).</p>
+</blockquote>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="small-worlds-and-large-worlds.html#cb17-1" aria-hidden="true" tabindex="-1"></a>card_bb_likelihood <span class="ot">&lt;-</span> <span class="dv">2</span></span>
+<span id="cb17-2"><a href="small-worlds-and-large-worlds.html#cb17-2" aria-hidden="true" tabindex="-1"></a>card_bw_likelihood <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb17-3"><a href="small-worlds-and-large-worlds.html#cb17-3" aria-hidden="true" tabindex="-1"></a>card_ww_likelihood <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb17-4"><a href="small-worlds-and-large-worlds.html#cb17-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-5"><a href="small-worlds-and-large-worlds.html#cb17-5" aria-hidden="true" tabindex="-1"></a>likelihood <span class="ot">&lt;-</span> <span class="fu">c</span>(card_bb_likelihood, card_bw_likelihood, card_ww_likelihood)</span>
+<span id="cb17-6"><a href="small-worlds-and-large-worlds.html#cb17-6" aria-hidden="true" tabindex="-1"></a>prior <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb17-7"><a href="small-worlds-and-large-worlds.html#cb17-7" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> likelihood <span class="sc">*</span> prior</span>
+<span id="cb17-8"><a href="small-worlds-and-large-worlds.html#cb17-8" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> posterior <span class="sc">/</span> <span class="fu">sum</span>(posterior)</span>
+<span id="cb17-9"><a href="small-worlds-and-large-worlds.html#cb17-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-10"><a href="small-worlds-and-large-worlds.html#cb17-10" aria-hidden="true" tabindex="-1"></a>posterior[<span class="dv">1</span>]</span></code></pre></div>
+<pre><code>## [1] 0.6666667</code></pre>
+</div>
+<div id="m5" class="section level3 hasAnchor" number="2.3.5">
+<h3><span class="header-section-number">2.3.5</span> 2M5<a href="small-worlds-and-large-worlds.html#m5" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Imagine that black ink is heavy, and so cards with black sides are heavier than cards with white sides. As a result, it’s less likely that a card with black sides is pulled from the bag. So again assume there are three cards: B/B, B/W, and W/W. After experimenting a number of times, you conclude that for every way to pull the B/B card from the bag, there are 2 ways to pull the B/W card and 3 ways to pull the W/W card. Again suppose that a card is pulled and a black side appears face up. Show that the probability the other side is black is now 0.5. Use the counting method, as before.</p>
+</blockquote>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="small-worlds-and-large-worlds.html#cb19-1" aria-hidden="true" tabindex="-1"></a>card_bb_likelihood <span class="ot">&lt;-</span> <span class="dv">2</span></span>
+<span id="cb19-2"><a href="small-worlds-and-large-worlds.html#cb19-2" aria-hidden="true" tabindex="-1"></a>card_bw_likelihood <span class="ot">&lt;-</span> <span class="dv">1</span></span>
+<span id="cb19-3"><a href="small-worlds-and-large-worlds.html#cb19-3" aria-hidden="true" tabindex="-1"></a>card_ww_likelihood <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb19-4"><a href="small-worlds-and-large-worlds.html#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="small-worlds-and-large-worlds.html#cb19-5" aria-hidden="true" tabindex="-1"></a>likelihood <span class="ot">&lt;-</span> <span class="fu">c</span>(card_bb_likelihood, card_bw_likelihood, card_ww_likelihood)</span>
+<span id="cb19-6"><a href="small-worlds-and-large-worlds.html#cb19-6" aria-hidden="true" tabindex="-1"></a>prior <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>)</span>
+<span id="cb19-7"><a href="small-worlds-and-large-worlds.html#cb19-7" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> likelihood <span class="sc">*</span> prior</span>
+<span id="cb19-8"><a href="small-worlds-and-large-worlds.html#cb19-8" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> posterior <span class="sc">/</span> <span class="fu">sum</span>(posterior)</span>
+<span id="cb19-9"><a href="small-worlds-and-large-worlds.html#cb19-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-10"><a href="small-worlds-and-large-worlds.html#cb19-10" aria-hidden="true" tabindex="-1"></a>posterior[<span class="dv">1</span>]</span></code></pre></div>
+<pre><code>## [1] 0.5</code></pre>
+</div>
+<div id="m7" class="section level3 hasAnchor" number="2.3.6">
+<h3><span class="header-section-number">2.3.6</span> 2M7<a href="small-worlds-and-large-worlds.html#m7" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Assume again the original card problem, with a single card showing a black side face up. Before looking at the other side, we draw another card from the bag and lay it face up on the table. The face that is shown on the new card is white. Show that the probability that the first card, the one showing a black side, has black on its other side is now 0.75. Use the counting method, if you can. Hint: Treat this like the sequence of globe tosses, countng all the ways to see each observation, for each possiible first card.</p>
+</blockquote>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="small-worlds-and-large-worlds.html#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 2 choices for first card, with 3 options for second card: 2 W/W + 1 W/B</span></span>
+<span id="cb21-2"><a href="small-worlds-and-large-worlds.html#cb21-2" aria-hidden="true" tabindex="-1"></a>card_bb_likelihood <span class="ot">&lt;-</span> <span class="dv">2</span> <span class="sc">*</span> <span class="dv">3</span> </span>
+<span id="cb21-3"><a href="small-worlds-and-large-worlds.html#cb21-3" aria-hidden="true" tabindex="-1"></a>card_wb_likelihood <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">*</span> <span class="dv">2</span> </span>
+<span id="cb21-4"><a href="small-worlds-and-large-worlds.html#cb21-4" aria-hidden="true" tabindex="-1"></a>card_ww_likelihood <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb21-5"><a href="small-worlds-and-large-worlds.html#cb21-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-6"><a href="small-worlds-and-large-worlds.html#cb21-6" aria-hidden="true" tabindex="-1"></a>likelihood <span class="ot">&lt;-</span> <span class="fu">c</span>(card_bb_likelihood, card_wb_likelihood, card_ww_likelihood)</span>
+<span id="cb21-7"><a href="small-worlds-and-large-worlds.html#cb21-7" aria-hidden="true" tabindex="-1"></a>prior <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>,<span class="dv">1</span>,<span class="dv">1</span>)</span>
+<span id="cb21-8"><a href="small-worlds-and-large-worlds.html#cb21-8" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> prior <span class="sc">*</span> likelihood</span>
+<span id="cb21-9"><a href="small-worlds-and-large-worlds.html#cb21-9" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> posterior <span class="sc">/</span> <span class="fu">sum</span>(posterior)</span>
+<span id="cb21-10"><a href="small-worlds-and-large-worlds.html#cb21-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-11"><a href="small-worlds-and-large-worlds.html#cb21-11" aria-hidden="true" tabindex="-1"></a>posterior[<span class="dv">1</span>]</span></code></pre></div>
+<pre><code>## [1] 0.75</code></pre>
+</div>
+<div id="h1" class="section level3 hasAnchor" number="2.3.7">
+<h3><span class="header-section-number">2.3.7</span> 2H1<a href="small-worlds-and-large-worlds.html#h1" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Suppose there are two species of panda bear. Both are equally common in the wild and live in the sample places. They look exactly alike and eat the same food, and there is yet no genetic assay capable of telling them apart. They differ however in their family sizes. Species A gives birth to twins 10% of the time, otherwise birthing a single infant. Species births twins 20% of the time, ottherwise birthing singleton infants. Assume these numbers are known with certainty, from many years of field research.
+Now suppose you are managing a captive panda breeding program. You have a newe female panda of unknown species, and she has just given birth to twins. What is the probability that her next birth will also be twins?</p>
+</blockquote>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="small-worlds-and-large-worlds.html#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># After first birth, likelihood of species A and B is equal to the rate the</span></span>
+<span id="cb23-2"><a href="small-worlds-and-large-worlds.html#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="co"># species give birth to twins</span></span>
+<span id="cb23-3"><a href="small-worlds-and-large-worlds.html#cb23-3" aria-hidden="true" tabindex="-1"></a>a_likelihood <span class="ot">&lt;-</span> <span class="fl">0.1</span></span>
+<span id="cb23-4"><a href="small-worlds-and-large-worlds.html#cb23-4" aria-hidden="true" tabindex="-1"></a>b_likelihood <span class="ot">&lt;-</span> <span class="fl">0.2</span></span>
+<span id="cb23-5"><a href="small-worlds-and-large-worlds.html#cb23-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-6"><a href="small-worlds-and-large-worlds.html#cb23-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Next calculate the posterior probability that the panda belongs to each</span></span>
+<span id="cb23-7"><a href="small-worlds-and-large-worlds.html#cb23-7" aria-hidden="true" tabindex="-1"></a><span class="co"># species, assume species are equally likely</span></span>
+<span id="cb23-8"><a href="small-worlds-and-large-worlds.html#cb23-8" aria-hidden="true" tabindex="-1"></a>likelihood <span class="ot">&lt;-</span> <span class="fu">c</span>(a_likelihood, b_likelihood)</span>
+<span id="cb23-9"><a href="small-worlds-and-large-worlds.html#cb23-9" aria-hidden="true" tabindex="-1"></a>prior <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>) </span>
+<span id="cb23-10"><a href="small-worlds-and-large-worlds.html#cb23-10" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> likelihood <span class="sc">*</span> prior</span>
+<span id="cb23-11"><a href="small-worlds-and-large-worlds.html#cb23-11" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> posterior <span class="sc">/</span> <span class="fu">sum</span>(posterior)</span>
+<span id="cb23-12"><a href="small-worlds-and-large-worlds.html#cb23-12" aria-hidden="true" tabindex="-1"></a>posterior</span></code></pre></div>
+<pre><code>## [1] 0.3333333 0.6666667</code></pre>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="small-worlds-and-large-worlds.html#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The probability the next birth is twins is the probability the panda belongs</span></span>
+<span id="cb25-2"><a href="small-worlds-and-large-worlds.html#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="co"># to each species times the likelihood each species gives birth to twins</span></span>
+<span id="cb25-3"><a href="small-worlds-and-large-worlds.html#cb25-3" aria-hidden="true" tabindex="-1"></a>(posterior[<span class="dv">1</span>] <span class="sc">*</span> a_likelihood) <span class="sc">+</span> (posterior[<span class="dv">2</span>] <span class="sc">*</span> b_likelihood)</span></code></pre></div>
+<pre><code>## [1] 0.1666667</code></pre>
+</div>
+<div id="h2" class="section level3 hasAnchor" number="2.3.8">
+<h3><span class="header-section-number">2.3.8</span> 2H2<a href="small-worlds-and-large-worlds.html#h2" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Recall all the facts from the problem above. Now compute the probability that the panda we have is from species A, asssuming we have observed only the first birth at that it was twins.</p>
+</blockquote>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="small-worlds-and-large-worlds.html#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of species A</span></span>
+<span id="cb27-2"><a href="small-worlds-and-large-worlds.html#cb27-2" aria-hidden="true" tabindex="-1"></a>p_a <span class="ot">&lt;-</span> <span class="fl">0.5</span></span>
+<span id="cb27-3"><a href="small-worlds-and-large-worlds.html#cb27-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-4"><a href="small-worlds-and-large-worlds.html#cb27-4" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of twins, given species A</span></span>
+<span id="cb27-5"><a href="small-worlds-and-large-worlds.html#cb27-5" aria-hidden="true" tabindex="-1"></a>p_ta <span class="ot">&lt;-</span> <span class="fl">0.1</span></span>
+<span id="cb27-6"><a href="small-worlds-and-large-worlds.html#cb27-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-7"><a href="small-worlds-and-large-worlds.html#cb27-7" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of twins, given species B</span></span>
+<span id="cb27-8"><a href="small-worlds-and-large-worlds.html#cb27-8" aria-hidden="true" tabindex="-1"></a>p_tb <span class="ot">&lt;-</span> <span class="fl">0.2</span></span>
+<span id="cb27-9"><a href="small-worlds-and-large-worlds.html#cb27-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-10"><a href="small-worlds-and-large-worlds.html#cb27-10" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of twins</span></span>
+<span id="cb27-11"><a href="small-worlds-and-large-worlds.html#cb27-11" aria-hidden="true" tabindex="-1"></a>p_t <span class="ot">&lt;-</span> (p_a <span class="sc">*</span> p_ta) <span class="sc">+</span> ((<span class="dv">1</span> <span class="sc">-</span> p_a) <span class="sc">*</span> p_tb)</span>
+<span id="cb27-12"><a href="small-worlds-and-large-worlds.html#cb27-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-13"><a href="small-worlds-and-large-worlds.html#cb27-13" aria-hidden="true" tabindex="-1"></a><span class="co"># probability of species A, given twins (using Bayes&#39; Theorem)</span></span>
+<span id="cb27-14"><a href="small-worlds-and-large-worlds.html#cb27-14" aria-hidden="true" tabindex="-1"></a><span class="co"># (note this is equivalent to `posterior[1]` above)</span></span>
+<span id="cb27-15"><a href="small-worlds-and-large-worlds.html#cb27-15" aria-hidden="true" tabindex="-1"></a>p_at <span class="ot">&lt;-</span> (p_ta <span class="sc">*</span> p_a) <span class="sc">/</span> p_t</span>
+<span id="cb27-16"><a href="small-worlds-and-large-worlds.html#cb27-16" aria-hidden="true" tabindex="-1"></a>p_at</span></code></pre></div>
+<pre><code>## [1] 0.3333333</code></pre>
+</div>
+<div id="h3" class="section level3 hasAnchor" number="2.3.9">
+<h3><span class="header-section-number">2.3.9</span> 2H3<a href="small-worlds-and-large-worlds.html#h3" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>Continuing on from the previous problem, suppose the same panda mother has a second birth and that it is not twins, but a singleton infant. Compute the posterior probability that this panda is species A.</p>
+</blockquote>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="small-worlds-and-large-worlds.html#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># likelihood for each species is Pr(twins) * Pr(singleton)</span></span>
+<span id="cb29-2"><a href="small-worlds-and-large-worlds.html#cb29-2" aria-hidden="true" tabindex="-1"></a>a_likelihood <span class="ot">&lt;-</span> <span class="fl">0.1</span> <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> <span class="fl">0.1</span>)</span>
+<span id="cb29-3"><a href="small-worlds-and-large-worlds.html#cb29-3" aria-hidden="true" tabindex="-1"></a>b_likelihood <span class="ot">&lt;-</span> <span class="fl">0.2</span> <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> <span class="fl">0.2</span>)</span>
+<span id="cb29-4"><a href="small-worlds-and-large-worlds.html#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-5"><a href="small-worlds-and-large-worlds.html#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="co"># compute posterior probabilities</span></span>
+<span id="cb29-6"><a href="small-worlds-and-large-worlds.html#cb29-6" aria-hidden="true" tabindex="-1"></a>likelihood <span class="ot">&lt;-</span> <span class="fu">c</span>(a_likelihood, b_likelihood)</span>
+<span id="cb29-7"><a href="small-worlds-and-large-worlds.html#cb29-7" aria-hidden="true" tabindex="-1"></a>prior <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>)</span>
+<span id="cb29-8"><a href="small-worlds-and-large-worlds.html#cb29-8" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> likelihood <span class="sc">*</span> prior</span>
+<span id="cb29-9"><a href="small-worlds-and-large-worlds.html#cb29-9" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> posterior <span class="sc">/</span> <span class="fu">sum</span>(posterior)</span>
+<span id="cb29-10"><a href="small-worlds-and-large-worlds.html#cb29-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-11"><a href="small-worlds-and-large-worlds.html#cb29-11" aria-hidden="true" tabindex="-1"></a>posterior[<span class="dv">1</span>]</span></code></pre></div>
+<pre><code>## [1] 0.36</code></pre>
+</div>
+<div id="h4" class="section level3 hasAnchor" number="2.3.10">
+<h3><span class="header-section-number">2.3.10</span> 2H4<a href="small-worlds-and-large-worlds.html#h4" class="anchor-section" aria-label="Anchor link to header"></a></h3>
+<blockquote>
+<p>A common boast of Bayesian statisticians is that Bayesian inference makes it easy to use all of the data, even if the data are of different types.
+So suppose now that a veterinarian comes along who has a new genetic test that she claims can identify the species of our mother panda. But the test, like all tests, is imperfect. This is the information you have about the test:</p>
+</blockquote>
+<blockquote>
+<p>The probability it correctly identifies a species A panda is 0.8.
+The probability it correctly identifies a species B panda is 0.65.
+The vet administers the test to your panda and tells you that the test is positive for species A. First ignore your previous information from the births and compute the posterior probability that your panda is species A. Then redo your calculation, now using the birth data as well.</p>
+</blockquote>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="small-worlds-and-large-worlds.html#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="co"># use Bayes&#39; Theorem to determine the probability of species A, given a positive</span></span>
+<span id="cb31-2"><a href="small-worlds-and-large-worlds.html#cb31-2" aria-hidden="true" tabindex="-1"></a><span class="co"># test</span></span>
+<span id="cb31-3"><a href="small-worlds-and-large-worlds.html#cb31-3" aria-hidden="true" tabindex="-1"></a>p_ap <span class="ot">&lt;-</span> (<span class="fl">0.8</span> <span class="sc">*</span> <span class="fl">0.5</span>) <span class="sc">/</span> ((<span class="fl">0.5</span> <span class="sc">*</span> <span class="fl">0.8</span>) <span class="sc">+</span> (<span class="fl">0.5</span> <span class="sc">*</span> <span class="fl">0.35</span>))</span>
+<span id="cb31-4"><a href="small-worlds-and-large-worlds.html#cb31-4" aria-hidden="true" tabindex="-1"></a>p_ap</span></code></pre></div>
+<pre><code>## [1] 0.6956522</code></pre>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="small-worlds-and-large-worlds.html#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Now include test data with observed births</span></span>
+<span id="cb33-2"><a href="small-worlds-and-large-worlds.html#cb33-2" aria-hidden="true" tabindex="-1"></a><span class="co"># likelihood for each species is Pr(twins) * Pr(singleton)</span></span>
+<span id="cb33-3"><a href="small-worlds-and-large-worlds.html#cb33-3" aria-hidden="true" tabindex="-1"></a>a_likelihood <span class="ot">&lt;-</span> <span class="fl">0.1</span> <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> <span class="fl">0.1</span>)</span>
+<span id="cb33-4"><a href="small-worlds-and-large-worlds.html#cb33-4" aria-hidden="true" tabindex="-1"></a>b_likelihood <span class="ot">&lt;-</span> <span class="fl">0.2</span> <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> <span class="fl">0.2</span>)</span>
+<span id="cb33-5"><a href="small-worlds-and-large-worlds.html#cb33-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-6"><a href="small-worlds-and-large-worlds.html#cb33-6" aria-hidden="true" tabindex="-1"></a><span class="co"># compute posterior probabilities, using test result as prior</span></span>
+<span id="cb33-7"><a href="small-worlds-and-large-worlds.html#cb33-7" aria-hidden="true" tabindex="-1"></a>likelihood <span class="ot">&lt;-</span> <span class="fu">c</span>(a_likelihood, b_likelihood)</span>
+<span id="cb33-8"><a href="small-worlds-and-large-worlds.html#cb33-8" aria-hidden="true" tabindex="-1"></a>prior <span class="ot">&lt;-</span> <span class="fu">c</span>(p_ap, (<span class="dv">1</span> <span class="sc">-</span> p_ap))</span>
+<span id="cb33-9"><a href="small-worlds-and-large-worlds.html#cb33-9" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> likelihood <span class="sc">*</span> prior</span>
+<span id="cb33-10"><a href="small-worlds-and-large-worlds.html#cb33-10" aria-hidden="true" tabindex="-1"></a>posterior <span class="ot">&lt;-</span> posterior <span class="sc">/</span> <span class="fu">sum</span>(posterior)</span>
+<span id="cb33-11"><a href="small-worlds-and-large-worlds.html#cb33-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb33-12"><a href="small-worlds-and-large-worlds.html#cb33-12" aria-hidden="true" tabindex="-1"></a>posterior[<span class="dv">1</span>]</span></code></pre></div>
+<pre><code>## [1] 0.5625</code></pre>
+
+</div>
+</div>
+</div>
+            </section>
+
+          </div>
+        </div>
+      </div>
+<a href="the-golem-of-prague.html" class="navigation navigation-prev " aria-label="Previous page"><i class="fa fa-angle-left"></i></a>
+<a href="sampling-the-imaginary.html" class="navigation navigation-next " aria-label="Next page"><i class="fa fa-angle-right"></i></a>
+    </div>
+  </div>
+<script src="libs/gitbook-2.6.7/js/app.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/clipboard.min.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-search.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-sharing.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-fontsettings.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-bookdown.js"></script>
+<script src="libs/gitbook-2.6.7/js/jquery.highlight.js"></script>
+<script src="libs/gitbook-2.6.7/js/plugin-clipboard.js"></script>
+<script>
+gitbook.require(["gitbook"], function(gitbook) {
+gitbook.start({
+"sharing": {
+"github": false,
+"facebook": true,
+"twitter": true,
+"linkedin": false,
+"weibo": false,
+"instapaper": false,
+"vk": false,
+"whatsapp": false,
+"all": ["facebook", "twitter", "linkedin", "weibo", "instapaper"]
+},
+"fontsettings": {
+"theme": "white",
+"family": "sans",
+"size": 2
+},
+"edit": {
+"link": null,
+"text": null
+},
+"history": {
+"link": null,
+"text": null
+},
+"view": {
+"link": null,
+"text": null
+},
+"download": null,
+"search": {
+"engine": "fuse",
+"options": null
+},
+"toc": {
+"collapse": "subsection"
+}
+});
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    var src = "true";
+    if (src === "" || src === "true") src = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/latest.js?config=TeX-MML-AM_CHTML";
+    if (location.protocol !== "file:")
+      if (/^https?:/.test(src))
+        src = src.replace(/^https?:/, '');
+    script.src = src;
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+</body>
+
+</html>
