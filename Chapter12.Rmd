@@ -1,0 +1,1833 @@
+# Monsters and Mixtures  
+
+## Over-dispersed counts  
+現実のデータは様々な過程がミックスされて生成されることがあるため、理想的な分布よりも幅が広くなることがある。二項分布やポワソン分布では平均と分散が1つのパラメータで表されるため、これがおきやすい。例えば、二項分布の期待値が$Np$であれば、その分散は$Np(1-p)$となり、ポワソン分布の平均と分散は同じ$\lambda$である。
+本節では、*continuous mixture*モデルと呼ばれるものを扱う。これでは、観察そのものではなく、観察の分布に対して線形モデルが適用される。実際上は、より柔軟なモデリングができる階層モデルを用いる方が過分散への対処は簡単である。
+
+### Beta binomial.  
+ベータ二項分布は、二項分布の混合分布であり、それぞれのカウントに対する確率が推定される。また、それぞれのカウントが得られる確率も共通の**ベータ分布**から得られると仮定する。ここでは、UCバークレーの入試結果の例を再び用いて例を見ていく。  
+ベータ分布は、平均確率$\bar{p}$とshape parameterの$\theta$の2つのパラメータで定義される。$\theta$は分布の広さに関するパラメータで、$\theta$が2のときに一様分布になる。$\theta$が2以上になると分布は狭くなり、$\theta$が2以下になると0と1に分布が集中していく。なお、通常ベータ分布は$\alpha$と$\beta$を用いて、 
+<br />  
+
+$$
+Beta(y|\alpha, \beta) = \frac{y^{\alpha-1} (1-y)^{\beta-1}}{B(\alpha, \beta)}
+$$
+<br/>  
+
+で表される（テキストの$\bar{p}$と$\theta$は$\alpha$と$\beta$とは一致していない）。$\bar{p} = \frac{\alpha}{\alpha + \beta}$、$\theta = \alpha + \beta$であるので、$\alpha = \bar{p} \theta$、$\beta = \theta(1-\bar{p})$ で表せる。
+
+
+```{r}
+## p,Θからα、βを得る関数。
+transbeta <- function(p, theta) {
+  if (p <= 0 | p >= 1) stop("must have 0 < p < 1")
+  if (theta <= 0) stop("theta must be > 0")
+  a <- p * theta
+  b <- (1.0 - p) * theta
+  return(list(a = a, b = b))
+}
+
+transbeta(0.5, 0.5)
+```
+
+様々なベータ分布を書いてみる（図\@ref(fig:beta)）。  
+```{r beta, fig.height = 5, fig.cap = "様々なパラメータのベータ分布"}
+crossing(p = c(0.25, 0.5, 0.75),
+         theta = c(0.5,2,5,15,30)) %>% 
+   tidyr::expand(nesting(p,theta), x = seq(0,1,length.out=50)) %>% 
+   mutate(density = dbeta2(x, p, theta),
+          mu = str_c("mu == ", p %>% str_remove(.,"0")),
+          kappa = factor(str_c("kappa == ", theta),
+                         levels = c("kappa == 30", 
+                                    "kappa == 15", "kappa == 5", "kappa == 2", "kappa == 0.5")))%>% 
+   ggplot(aes( x=x, y = density))+
+   geom_area(fill = "navy")+
+   scale_x_continuous("probability space", 
+                     breaks = c(0, .5, 1), 
+                     labels = c("0", ".5", "1")) +
+  scale_y_continuous(NULL, labels = NULL) +
+  theme(axis.ticks.y = element_blank()) +
+  facet_grid(kappa ~ mu, labeller = label_parsed)
+```
+  
+  
+それでは、モデリングを行う。モデル式は以下の通り。$\theta$を2以上にするために工夫がしてある。   
+<br />  
+  
+$$
+\begin{aligned}
+  A_{i} &\sim BetaBinomial(N_{i}, \bar{p_{i}}, \theta)\\
+  logit(\bar{p_{i}})& = \alpha_{GID_{[i]}}\\  
+  \alpha_{j} &\sim Normal(0,1.5)\\
+  \theta &= \phi +2\\
+  \phi &\sim Exponential(1)
+\end{aligned}
+$$
+<br />  
+  
+```{r}
+data("UCBadmit")
+d <- UCBadmit %>% 
+   mutate(gid = ifelse(applicant.gender == "male","1","2"))
+```
+
+`brms`パッケージはβ二項分布を実装していないので、自作する必要がある。  
+```{r}
+beta_binomial2 <- custom_family(
+  "beta_binomial2", dpars = c("mu", "kappa"),
+  links = c("logit", "log"), lb = c(NA, 2),
+  type = "int", vars = "vint1[n]"
+)
+
+stanvars <- stanvar(scode = "
+  real beta_binomial2_lpmf(int y, real mu, real kappa, int T) {
+    return beta_binomial_lpmf(y | T, mu * kappa, (1 - mu) * kappa);
+  }
+  int beta_binomial2_rng(real mu, real kappa, int T) {
+    return beta_binomial_rng(T, mu * kappa, (1 - mu) * kappa);
+  }
+",
+block = "functions")
+```
+
+それでは、モデルにフィットさせる。  
+```{r}
+b12.1 <-
+  brm(data = d, 
+      family = beta_binomial2,  # here's our custom likelihood
+      admit | vint(applications) ~ 0 + gid,
+      prior = c(prior(normal(0, 1.5), class = b),
+                prior(exponential(1), class = kappa)),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      stanvars = stanvars,  # note our `stanvars`
+      seed = 12,
+      file = "output/Chapter12/b12.1")
+```
+
+結果は以下の通り（表\ref{res-b12-1}）。
+```{r res-b12-1}
+posterior_samples(b12.1) %>% 
+   data.frame() %>% 
+   mutate(diff = b_gid1 - b_gid2) %>% 
+   pivot_longer(-lp__) %>% 
+   group_by(name) %>% 
+   mean_qi(value, .width=0.89) %>% 
+   kable(booktabs =T,
+         digits=2,
+         caption = "b12.1の結果果",
+         align = "lcccccc") %>% 
+   kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+事後分布を可視化する（図\@ref(fig:b12-1)）。
+```{r b12-1, fig.cap = "女性の合格率の事後分布"}
+post <- posterior_samples(b12.1) 
+
+## 確率の事後分布
+post %>% 
+   mutate(iter= 1:n(),
+          p_bar = inv_logit_scaled(b_gid2)) %>% 
+   slice_sample(n=100) %>% 
+   tidyr::expand(nesting(iter, p_bar, kappa),
+          x = seq(0,1,by=.005)) %>% 
+   mutate(density = dbeta2(x, p_bar, kappa)) %>% 
+   ggplot(aes(x=x, y=density))+
+   stat_function(fun = dbeta2,
+                 args = list(prob = mean(inv_logit_scaled(post[, "b_gid2"])),
+                            theta = mean(post[, "kappa"])),
+                size = 1.5, color = "navy")+
+   geom_line(aes(group=iter),
+             alpha = .2, color = "navy")+
+   scale_y_continuous(NULL, breaks = NULL, limits = c(0, 3)) +
+  labs(subtitle = "distribution of female admission rates",
+       x = "probability admit")+
+   theme(aspect.ratio=1)
+```
+
+
+```{r}
+expose_functions(b12.1, vectorize = TRUE)
+
+# required to use `predict()`
+log_lik_beta_binomial2 <- function(i, prep) {
+  mu     <- prep$dpars$mu[, i]
+  kappa    <- prep$dpars$kappa
+  trials <- prep$data$vint1[i]
+  y      <- prep$data$Y[i]
+  beta_binomial2_lpmf(y, mu, kappa, trials)
+}
+
+posterior_predict_beta_binomial2 <- function(i, prep, ...) {
+  mu     <- prep$dpars$mu[, i]
+  kappa    <- prep$dpars$kappa
+  trials <- prep$data$vint1[i]
+  beta_binomial2_rng(mu, kappa, trials)
+}
+
+# required to use `fitted()`
+posterior_epred_beta_binomial2 <- function(prep) {
+  mu     <- prep$dpars$mu
+  trials <- prep$data$vint1
+  trials <- matrix(trials, nrow = nrow(mu), ncol = ncol(mu), byrow = TRUE)
+  mu * trials
+}
+```
+
+
+推定された結果を図示すると以下の通り(図\@ref(fig:b12-1-2))。予測分布の範囲にうまくデータが納まっているが、広すぎて結果の解釈が難しい。
+
+```{r b12-1-2, fig.cap = "b12.1の事後予測分布。白抜き点とエラーバーは95%信用区間を表す。十字の点は95%予測区間の上限と下限を表す。"}
+fitted(b12.1) %>% 
+   data.frame() %>% 
+   bind_cols(d) %>% 
+   mutate(case=1:n()) -> fitb12.1
+
+#上手く回らず
+predict(b12.1) %>% 
+  data.frame() %>% 
+  bind_cols(d) %>% 
+  mutate(case=1:n()) -> pre12.1
+
+d %>% 
+   mutate(case = 1:n()) %>% 
+   ggplot(aes(x = case))+
+   geom_point(aes(y = admit/applications),
+              color = "navy", size=2)+
+   geom_pointinterval(data = fitb12.1,
+                      aes(y=Estimate/applications,
+                          ymin = Q2.5/applications,
+                          ymax = Q97.5/applications),
+                      point_size = 3, shape=1)+
+  geom_point(data = pre12.1,
+                      aes(y = Q2.5/applications),
+                      size=3, shape=3)+
+  geom_point(data = pre12.1,
+                      aes(y = Q97.5/applications),
+                      size=3, shape=3)+
+   scale_x_continuous(breaks = 1:12)+
+   scale_y_continuous(breaks = seq(0,1,0.2), limits=c(0,1))+
+   labs(y = "A")
+```
+  
+  
+### Negative binomial or gamma-Poisson.  
+続いて、ポワソン分布で過分散が起きた際に用いる負の二項分布(もしくはガンマ-ポワソン分布)について学ぶ。負の二項分布はそれぞれの観察に対して平均が与えられ、それらは共通のガンマ分布からもたらされるものとする。
+ガンマ分布は、`shape`($\alpha$)と`rate`($\beta$)の2つのパラメータで表される。
+<br />  
+
+$$
+Gamma(y| \alpha, \beta) = \frac{\beta^\alpha y^{\alpha-1}e^{-\beta y}}{\Gamma(\alpha)} 
+$$
+<br />  
+
+それでは、実際にモデリングしてみよう。下式で、$\lambda$は`rate`を、$\phi$は`shape`を表す。 
+<br />  
+
+$$
+y_{i} \sim Gamma-Poisson(\lambda_{i}, \phi)
+$$
+<br />  
+
+オセアニアの道具数に関するモデリングを再び考える[@Kline2010]。
+```{r}
+data(Kline)
+
+d2 <-
+  Kline %>% 
+  mutate(P = standardize(log(population)),
+         contact_id = ifelse(contact == "high", 2L, 1L),
+         cid        = contact) -> d2
+
+```
+
+モデル式は以下の通り。  
+<br />  
+
+$$
+\begin{aligned}
+  total_tools_{i} &\sim GammaPoisson(\mu_{i}, \alpha)\\
+  \mu_{i} &\sim exp(\beta_{0,cid_{[i]}}) P_{i}^{\beta_{1,cid_{[i]}}}/\gamma\\
+  \beta_{0,j} &\sim Normal(1,1)\\
+  \beta_{1,j} &\sim Exponential(1)\\
+  \gamma &\sim Exponential(1)\\
+  \alpha &\sim Exponential(1)
+\end{aligned}
+$$
+<br />  
+
+```{r}
+b12.2 <- 
+  brm(data = d2,
+      family = negbinomial(link = "identity"),
+      bf(total_tools ~ exp(b0)*population^b1/g,
+         b0 + b1 ~ 0 + cid,
+         g ~1,
+         nl = TRUE),
+      prior = c(prior(normal(1, 1), nlpar = b0),
+                prior(exponential(1), nlpar = b1, lb = 0),
+                prior(exponential(1), nlpar = g, lb = 0),
+                prior(exponential(1), class = shape)),
+      seed = 12, control = list(adapt_delta = .95),
+      chains =4, cores =4,
+       backend = "cmdstanr",
+      file = "output/Chapter12/b12.2")
+```
+
+分析の結果は以下の通り（表\@ref(tab:res-b12-2)）。
+```{r res-b12-2}
+posterior_summary(b12.2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter != "lp__") %>% 
+  kable(digits =2,
+        booktabs = TRUE,
+        caption = "b12.2の結果",
+        align = "lcccc") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+PSISを計算すると、ポワソン分布を使った場合に比べると、pareto-kが改善している。  
+```{r}
+b11.11 <- readRDS("output/Chapter11/b11.11.rds")
+b12.2 <- add_criterion(b12.2, "loo")
+
+#ポワソン
+loo(b11.11)
+
+#負の二項分布
+loo(b12.2)
+```
+
+```{r}
+## Poisson
+
+nd <-
+  distinct(d2, cid) %>% 
+  tidyr::expand(cid, 
+         population = seq(from = 0, to = 300000, length.out = 100))
+
+# compute the poster predictions for lambda
+fitted(b11.11,
+       newdata = nd,
+       probs = c(.055, .945)) %>%
+  data.frame() %>%
+  bind_cols(nd) %>%
+  ggplot(aes(x = population, group = cid))+
+  geom_smooth(aes(y = Estimate, ymin = Q5.5,
+                  ymax = Q94.5,
+                  linetype = cid,
+                  fill = cid,
+                  color = cid),
+              stat = "identity",
+              size=1.5, alpha=1/2)+
+  geom_point(data = bind_cols(d2, b11.11$criteria$loo$diagnostics),
+             aes(y = total_tools, size = pareto_k,
+                 color = cid),stroke = 1.5,
+             alpha = 1/2)+
+  scale_shape_manual(values = c(16,1))+
+  scale_color_manual(values = c("lightblue3","orange3"))+
+  scale_fill_manual(values = c("lightblue", "orange"))+
+  scale_x_continuous(breaks = seq(0,250000,by=50000))+
+  coord_cartesian(xlim = c(0,280000),
+                  ylim = c(0, 80))+
+  theme(legend.position = "none",
+        aspect.ratio=1)+
+  labs(subtitle = "pure Poisson model")-> p1
+
+## negbinomial  
+text <-
+  distinct(d2, cid) %>% 
+  mutate(population  = c(150000, 110000),
+         total_tools = c(57, 69),
+         label       = str_c(cid, " contact"))
+
+
+# compute the poster predictions for lambda
+fitted(b12.2,
+       newdata = nd,
+       probs = c(.055, .945)) %>%
+  data.frame() %>%
+  bind_cols(nd) %>%
+  ggplot(aes(x = population, group = cid))+
+  geom_smooth(aes(y = Estimate, ymin = Q5.5,
+                  ymax = Q94.5,
+                  linetype = cid,
+                  fill = cid,
+                  color = cid),
+              stat = "identity",
+              size=1.5, alpha=1/2)+
+  geom_point(data = bind_cols(d2, b12.2$criteria$loo$diagnostics),
+             aes(y = total_tools, size = pareto_k,
+                 color = cid),stroke = 1.5,
+             alpha = 1/2)+
+  scale_shape_manual(values = c(16,1))+
+  scale_color_manual(values = c("lightblue3","orange3"))+
+  scale_fill_manual(values = c("lightblue", "orange"))+
+  scale_x_continuous(breaks = seq(0,250000,by=50000))+
+  coord_cartesian(xlim = c(0,280000),
+                  ylim = c(0, 80))+
+  theme(legend.position = "none",
+        aspect.ratio=1) +
+  geom_text(data = text,
+            aes(y = total_tools, label = label))+
+  labs(subtitle = "gamma-Poisson model")->p2
+```
+
+結果を示すと以下の通り（図\@ref(fig:b12-2)）。ポワソン分布に比べて、かなり広がりが大きくなっていることが分かる。  
+```{r b12-2, fig.cap = "ポワソン分布（左）と負の二項分布（右）による結果"}
+p1+p2
+```
+
+
+また、国ごとの予測分布は以下のようになる（図\@ref(fig:predict-b12-2)）。  
+```{r predict-b12-2, fig.cap = "国ごとの予測分布"}
+predict(b12.2, summary = FALSE) %>% 
+  data.frame() %>% 
+  set_names(d2$culture) %>% 
+  pivot_longer(everything(),
+               names_to = "culture",
+               values_to = "tools") %>% 
+  left_join(d2) -> predict
+
+ggplot(predict, aes(x = tools))+
+  stat_halfeye(point_interval= mean_qi, .width =.5,
+               fill = "navy", color ="grey")+
+  geom_vline(aes(xintercept = total_tools),
+             color = "grey")+
+  scale_x_continuous(expression(lambda["[culture]"]), breaks = 0:2 * 100) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  coord_cartesian(xlim = c(0, 210)) +
+  facet_wrap(~ culture, nrow = 2)
+  
+```
+
+
+### Over-dispersion, entropy, and information criteria.  
+これらのモデルにWAICやPSISを用いることはできない。
+
+## Zero-inflated outcomes  
+データが複数のプロセスを混合して得られることがある。そのようなデータに対しては**混合モデル**が有用である。本節では、特に0が多いカウントデータを扱う。  
+
+### Example: Zero-inflated Poisson.  
+11章で考えた修道院の例を考える。何日かに一度僧侶が全員休みを取って酒を飲む場合を考える。この場合、ある日に1つも原稿ができないのは、働いているのに完成しなかった場合と、酒を飲んでいる場合が両方含まれている。ここで、酒を飲む確率を$p$、働いているときに1日当たり原稿ができる数の平均を$\lambda$とする。  
+この現象を考えるため、二つのプロセスが混合された尤度関数を考える。まず、コイン投げで酒を飲むかか否かが決まり（ベルヌーイ分布）、その後働いた場合の原稿製造数がポワソン分布に従うとする。このとき、ある日の製造数が0である確率は以下の通り。    
+
+<br />  
+
+$$
+\begin{aligned}
+Pr(0|p, \lambda) &= Pr(drink|p) + Pr(work|p) \times Pr(0|\lambda)\\
+                 &= p + (1-p)exp(-\lambda)
+\end{aligned}
+$$
+<br />  
+
+また、0以外の値が得られる確率は以下の通り。
+<br />  
+
+$$
+Pr(y|y>0, p,\lambda) = (1-p) \frac{\lambda^y exp(-\lambda)}{y!}
+$$
+<br />  
+
+モデル式にすると以下の通り。２つの線形モデルとリンク関数が含まれる点に注意。    
+<br />  
+
+$$
+\begin{aligned}
+  y_{i} &\sim ZIPoisson(p_{i}, \lambda)\\
+  logit(p_{i}) &= \alpha_{p} + \beta_{p}x_{i}\\
+  log(\lambda_{i}) &= \alpha_{\lambda} + \beta_{\lambda}x_{i}\\
+\end{aligned}
+$$
+<br />  
+
+データをシミュレートしてモデリングする。  
+```{r}
+p <- 0.2
+lambda <- 1
+N <- 365
+
+set.seed(365)
+drink <- rbinom(N, 1, p)
+
+y <- (1-drink)*rpois(N, lambda)
+```
+
+データをヒストグラムに書くと以下のようになる（図\@ref(fig:count)）。  
+```{r count, fig.cap = "1日の原稿完成数。緑は働いた日、灰色は休みの日を表す。"}
+d3 <- tibble(drink = factor(drink, levels = 1:0),
+             y = y)
+
+ggplot(d3, aes(x=y, fill=drink))+
+  geom_histogram(binwidth=1, size=1/10, color = "grey92")+
+  scale_fill_manual(values = c("lemonchiffon4", "olivedrab4"))+
+  xlab("manuscript completed")+
+  theme(legend.position ="none", aspect.ratio=0.7)
+```
+  
+  
+それでは、モデリングを行う。  
+```{r}
+b12.3 <- 
+  brm(data = d3,
+      family  = zero_inflated_poisson,
+      y~1,
+      prior = c(prior(normal(1, 0.5), class = Intercept),
+                prior(beta(2, 6), class = zi)),
+       backend = "cmdstanr",
+      seed=12, file = "output/Chapter12/b12.3")
+```
+
+結果は表\@ref(tab:res-b12-3)の通り。$exp(0.02)=$ `r exp(0.02)`なので、うまく推定できているよう。
+```{r res-b12-3}
+posterior_summary(b12.3) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter != "lp__") %>% 
+  kable(digits=2,
+        booktabs =T,
+        caption = "b12.3の結果") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+## Ordered categorical outcomes  
+目的変数がカテゴリカルでかつ順序があるとき（ex. 心理テストで7件法で回答を求めるとき）、その目的変数を連続変数として扱ってはいけない。なぜなら1から2に変わるときと、5から6に変わるときでは意味が違ってくる可能性があるからである。このような変数を扱うために通常用いられるのは、**累積リンク関数**(*cumulative link function*)と呼ばれるものである。累積確率とは、それより低い値の確率を累計したもので、たとえば3になる累積確率は1, 2, 3になる確率を合計したものである。  
+
+### Example: Moral intuition.  
+いわゆるトロッコ問題では、問題の設定を少し変えるだけで、生じる結果が同じであっても異なる判断につながることがある。これまでの研究では、このようなヒトの道徳的判断の変化を説明する無意識の推論には少なくとも3つの原理があることを明らかにしている。  
+
+1. **The action principle**  
+行動によってもたらされた害は、何もしなかったことによってもたらされた同等の害よりも道徳的に悪いとされる。  
+2. **The intention principle**  
+目的のためになされた意図的な害は、副産物的な害よりも道徳的に悪いとされる。  
+3. **The contact problem**  
+物理的な接触によってもたらされた害は、そうでない害よりも道徳的に悪いとされる。  
+
+以下では、トロッコ問題について331人に7件法に回答してもらったデータを用いる。  
+```{r}
+data(Trolley)
+d4 <- Trolley
+glimpse(d4)
+```
+
+12.3.2. Describing an ordered distribution with intercepts.  
+問題に対する回答の分布は以下の通り（図\@ref(fig:outcome)のA）。また、累積確率を表したものが図\@ref(fig:outcome)のBである。最後に、対数累積オッズを考える。ある値$k$に対する対数累積オッズ$\alpha_{k}$配下の通り。  
+<br />  
+
+$$
+\alpha_{k} = log \frac{Pr(y_{i} \leq k )}{1 - Pr(y_{i} \leq k)}
+$$
+<br />  
+
+対数累積オッズを表したものが図\@ref(fig:outcome)のCである。最も大きい値の対数累積オッズは無限大になることに注意($\frac{1}{1-1} = \infty$)。  
+
+```{r}
+## hist
+d4 %>% 
+  ggplot(aes(x=response))+
+  geom_histogram(binwidth = 0.1)+
+  scale_x_continuous(breaks=seq(1,7,by=1))+
+  labs(subtitle = "A: Histogram")+
+  theme(aspect.ratio=1) -> p3
+
+## cumulative probability  
+d4 %>% 
+  count(response) %>% 
+  mutate(pr_k = n/nrow(d4),
+         cum = cumsum(pr_k)) %>% 
+  ggplot(aes(x = response, y = cum))+
+  geom_point(shape=21, color="grey92", size=2.5, 
+             stroke =1.5, fill = "khaki4")+
+  geom_line(color = "khaki4")+
+  scale_x_continuous(breaks = 1:7) +
+  scale_y_continuous("cumulative proportion", 
+                     breaks = c(0, .5, 1), limits = c(0, 1)) +
+  theme(axis.ticks = element_blank(),
+        axis.title.y = element_text(angle = 90),
+        legend.position = "none",
+        aspect.ratio=1)+
+  labs(subtitle = "B: cumulative proportion") -> p4
+
+d4 %>% 
+  count(response) %>% 
+  mutate(pr_k = n/nrow(d4),
+         cum = cumsum(pr_k),
+         alpha = logit(cum)) %>%
+  filter(response<7) %>% 
+  ggplot(aes(x = response, y = alpha))+
+  geom_point(shape=21, color="grey92", size=2.5, 
+             stroke =1.5, fill = "khaki4")+
+  geom_line(color = "khaki4")+
+  scale_x_continuous(breaks = 1:7) +
+  scale_y_continuous("log-cumulative-odds", 
+                     breaks = c(-2, -1, 0,1,2)) +
+  coord_cartesian(xlim = c(1,7))+
+  theme(axis.ticks = element_blank(),
+        axis.title.y = element_text(angle = 90),
+        legend.position = "none",
+        aspect.ratio=1)+
+  labs(subtitle = "C: log-cumulative-odds") -> p5
+```
+
+
+```{r outcome, fig.cap = "トロッコ問題に対する回答。A: ヒストグラム、B: 累積確率、C: 対数累積オッズ. "}
+p3+p4+p5
+```
+  
+  
+モデリングでは、これらの対数累積オッズについての事後分布を得ることが目的なので、累積確率からそれぞれの値を得る確率を計算する必要がある。  
+<br />  
+
+$$
+p_{k} = Pr(y_{i} = k) = Pr(y_{i} \leq k) - Pr(y_{i} \leq k-1)
+$$
+<br />  
+
+さて、それでは準備が整ったのでモデリングに移ろう。モデル式は累積確率を$q_{k}$とすると以下の通り。  
+<br />  
+
+$$
+\begin{aligned} 
+  R_{i} &\sim Categorical(P)\\
+  p_{1} &= q_{1}\\
+  p_{k} &= q_{k} - q_{k-1} \;\;\; for K>k>1\\ 
+  p_{K} &= 1 - q_{K-1}\\
+  logit(q_{k}) &= \alpha_{k} - \phi_{i}\\
+  \phi_{i} &= terms \;of\;linear\;model\\
+  \alpha_{k} &\sim Normal(0,1.5)
+\end{aligned}
+$$
+<br />  
+
+それではモデリングを行う。  
+```{r}
+inits <- list(`Intercept[1]` = -2,
+              `Intercept[2]` = -1,
+              `Intercept[3]` = 0,
+              `Intercept[4]` = 1,
+              `Intercept[5]` = 2,
+              `Intercept[6]` = 2.5)
+
+inits_list <- list(inits, inits, inits, inits)
+
+b12.4 <- 
+  brm(data = d4, 
+      family = cumulative,
+      response ~ 1,
+      prior(normal(0, 1.5), class = Intercept),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      inits = inits_list,  
+      file = "output/Chapter12/b12.4")  
+```
+
+結果は以下の通り（表\@ref(tab:res-b12-4)）。  
+```{r res-b12-4}
+posterior_samples(b12.4) %>% 
+  mutate_all(inv_logit_scaled) %>% 
+  pivot_longer(starts_with("b_"),
+               names_to = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(mean = mean(value),
+            sd   = sd(value),
+            ll   = quantile(value, probs = .025),
+            ul   = quantile(value, probs = .975)) %>% 
+  kable(digits = 3,
+        booktabs = TRUE,
+        caption = "b12.4の結果。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+元のデータと推定結果を比較しても、かなりうまく推定できたことが分かる（表\@ref(tab:orig-data)）。  
+```{r orig-data}
+d4 %>%
+  count(response) %>%
+  mutate(pr_k     = n / nrow(d4),
+         cum = cumsum(pr_k)) %>% 
+  dplyr::select(response, cum) %>% 
+  kable(digits =3,
+        booktabs = TRUE,
+        caption = "元データにおける累積確率") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+### Adding predictor variables.  
+説明変数を加えるためには、それぞれの値$k$について対数累積オッズを以下のようにあらわす。このとき、$\beta$が増えるほど対数累積オッズも増えることに注意。    
+<br />  
+
+$$
+\begin{aligned}
+log \frac{Pr(y_{i} \leq k )}{1 - Pr(y_{i} \leq k)} &= \alpha_{k} -\phi_{i}  \\
+\phi_{i} &= \beta x_{i}
+\end{aligned}
+$$
+<br />  
+
+contactには、actionも伴う。そのため、このデータではcontactとactionを互いに排他的な変数としており、contactとactionを同時に調べることはしていない。よって、条件は以下の6つの場合に分かれるはずである。  
+(1) No action, contact, or intention  
+(2) Action only  
+(3) Intention only  
+(4) Contact only  
+(5) Action and intention  
+(6) Contact and intention
+
+よって以下のようなモデル式になる。  
+<br />  
+
+$$
+\begin{aligned} 
+  R_{i} &\sim Categorical(P)\\
+  p_{1} &= q_{1}\\
+  p_{k} &= q_{k} - q_{k-1} \;\;\; for K>k>1\\ 
+  p_{K} &= 1 - q_{K-1}\\
+  logit(q_{k}) &= \alpha_{k} - \phi_{i}\\
+  \phi_{i} &= \beta_{1}action_{i} + \beta_{2}contact_{i} +(\beta_{3} +\beta_{4}action_{i} + \beta_{5} contact_{i})intention_{i}  \\
+  \alpha_{k} &\sim Normal(0,1.5)\\
+  \beta_{1},...,\beta_{5} &\sim Normal(0,0.5)
+\end{aligned}
+$$
+<br />  
+
+それでは、モデリングを行う。  
+```{r}
+b12.5 <- 
+  brm(data = d4, 
+      family = cumulative,
+      response ~ 1 + action + contact + intention + intention:action + intention:contact,
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 12,
+       backend = "cmdstanr",
+      file = "output/Chapter12/b12.5")
+```
+
+結果は以下の通り（表\@ref(tab:res-b12-5)）。全ての係数は負なので、いずれの場合も物語への許容性が下がることが分かる。また、$\beta_{5}$すなわち、意図的かつアクションが伴う場合に倫理的評価はもっとも下がることが分かる（図\@ref(fig:b12-5)）。これは、intentionとaction単体ではそこまで大きく影響しないことを考えれば興味深い。        
+```{r res-b12-5}
+labs <- str_c("beta[", 1:5, "]")
+
+fixef(b12.5) %>% 
+  data.frame() %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b12-5の結果") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+```{r b12-5, fig.height = 2.5, fig.cap = "係数の事後平均と95%信用区間"}
+labs <- str_c("beta[", 1:5, "]")
+
+posterior_samples(b12.5) %>% 
+  dplyr::select(b_action:`b_contact:intention`) %>% 
+  set_names(labs) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(x = value, y = name)) +
+  geom_vline(xintercept = 0, alpha = 1/2, linetype = 3) +
+  stat_gradientinterval(.width = .5, size = 1, 
+                        point_size = 3, shape = 21,
+                        point_fill = "khaki4", 
+                        fill = "khaki2", 
+                        color = "khaki2") +
+  scale_x_continuous("marginal posterior", breaks = -5:0 / 4) +
+  scale_y_discrete(NULL, labels = parse(text = labs)) +
+  coord_cartesian(xlim = c(-1.4, 0))
+```
+
+
+それでは、結果を図示していく。
+```{r}
+nd <- 
+  d4 %>% 
+  distinct(action, contact, intention) %>% 
+  mutate(combination = str_c(action, contact, intention, sep = "_"))
+
+f12.5 <- fitted(b12.5, nd, summary=F)
+```
+
+
+```{r}
+f <- rbind(f12.5[,,1],
+           f12.5[,,2],
+           f12.5[,,3],
+           f12.5[,,4],
+           f12.5[,,5],
+           f12.5[,,6],
+           f12.5[,,7]) %>% 
+  data.frame() %>% 
+  set_names(pull(nd, combination)) %>% 
+  mutate(response = rep(1:7, each = n()/7),
+         iter = rep(1:4000, times=7))  %>% 
+  pivot_longer(-c(iter,response),
+               names_to = c("action", "contact", "intention"),
+               names_sep = "_",
+               values_to = "pk") %>% 
+  mutate(intention = intention %>% as.integer())
+
+```
+
+
+```{r}
+levels <- c("action=0, contact=0", "action=1, contact=0", "action=0, contact=1")
+
+## 各条件ごとの確率
+f %>% 
+  filter(response <7) %>% 
+  mutate(facet = factor(str_c("action=", action, ", contact=", contact), levels = levels)) %>% 
+  group_by(iter, facet, intention) %>% 
+  arrange(iter, facet, intention, response) %>% 
+  mutate(prob = cumsum(pk)) %>% 
+  ungroup() %>% 
+  nest(data=-iter) %>% 
+  slice_sample(n=50) %>% 
+  unnest(data) %>% 
+  ggplot(aes(x = intention, y = prob)) +
+  geom_line(aes(group = interaction(iter, response), 
+                color = prob),alpha = 1/10) +
+  geom_point(data = d4 %>%  
+               group_by(intention, contact, action) %>% 
+               count(response) %>% 
+               mutate(prob = cumsum(n / sum(n)),
+                      facet = factor(
+                        str_c("action=", action, ", contact=", contact), 
+                        levels = levels)) %>% 
+               filter(response < 7),
+             color = "olivedrab3") +
+  scale_color_gradient(low = "olivedrab4",
+                       high = "olivedrab1") +
+  scale_x_continuous("intention", breaks = 0:1) +
+  scale_y_continuous(breaks = c(0, .5, 1), limits = 0:1) +
+  theme(legend.position = "none",
+        strip.background = element_blank()) +
+  facet_wrap(~ facet) -> p6
+
+## 予測分布
+predict <- predict(b12.5, nd, scale="response", summary=F) 
+
+predict %>% 
+  data.frame() %>% 
+  set_names(pull(nd, combination)) %>% 
+  pivot_longer(everything(),
+               names_to = c("action", "contact", "intention"),
+               names_sep = "_",
+               values_to = "response") %>% 
+  mutate(facet = factor(str_c("action=", action, 
+                              ", contact=", contact),
+                        levels = levels)) %>% 
+  ggplot(aes(x = response, fill = intention)) +
+  geom_bar(width = 1/3, position = position_dodge(width = .4)) +
+  scale_fill_manual(values = c("black", "navy")) +
+  scale_x_continuous("response", breaks = 1:7) +
+  theme(legend.position = "none",
+        strip.background = element_blank()) +
+  facet_wrap(~ facet) -> p7
+  
+```
+
+
+結果は以下の通り（図\@ref(fig:b12-5-2)）。
+
+```{r b12-5-2, fig.height = 5, fig.cap = "モデルb12.5の推定結果。各プロットは、intentionの有無によってどのように回答が変わるかを示している。上段はそれぞれの事後累積確率を、下段はモデルから予測される回答の分布を図示している。なお、下段で黒はintentionが0のときを、青はintentionが1のときを示している。 \\label{fig.b12.5_2}"}
+p6/p7
+```
+
+
+## Ordered categorical predictors  
+説明変数にカテゴリカルな順序尺度を用いることもできる。先ほどのトロッコ問題のデータでは、回答者の最終学歴が変数として格納されている（表\@ref(tab:edu)）。順番が教育の程度とは対応していないので、順番を付け直している。それぞれの値の間の差は等間隔ではないので、連続変数としてはモデリングできない。  
+
+```{r}
+d4 <-d4 %>% 
+  mutate(edu_new = 
+           recode(edu,
+                  "Elementary School" = 1,
+                  "Middle School" = 2,
+                  "Some High School" = 3,
+                  "High School Graduate" = 4,
+                  "Some College" = 5, 
+                  "Bachelor's Degree" = 6,
+                  "Master's Degree" = 7,
+                  "Graduate Degree" = 8) %>% 
+           as.integer())
+```
+
+
+```{r edu}
+d4 %>% 
+  distinct(edu, edu_new) %>% 
+  arrange(edu_new) %>% 
+  kable(booktabs = TRUE,
+        align = "lc",
+        caption = "`Trolley`に含まれる回答者の学歴") %>% 
+  kable_styling(latex_options = "stripe")
+```
+
+
+そこで、実際のモデリングでは1つ教育の程度ががるたびの増分をパラメータとして組み込む。例えば、以下の式で$\delta_{1}$は小学校から中学校に上がるときの増分、$\delta_{2}$は中学校から高校中退に上がるときの増分を示す。  
+<br />  
+
+$$
+\begin{aligned}
+\phi_{i} &= \delta_{1} + ... + \delta_{7} + other \; stuff\\
+         &= \sum^{7}_{j=1} \delta_{j} + other \; stuff
+\end{aligned}
+$$
+<br />  
+
+特定の人*i*について$\phi_{i}$を以下のように定める。なお、$E_{i}$はその人の最終学歴を、$\delta_{j}$はすべてを足し合わせると1になるとする。つまり、$\\beta_{E}$は学歴が与える最大の効果（博士課程を卒業した人の効果）を表している。    
+<br />  
+
+$$
+\phi_{i} = \beta_{E}\sum^{E_{i}-1}_{j=0} \delta_{j} + other \; stuff
+$$
+<br />  
+
+以下のようなモデルを考える。今回は交互作用は考えない。    
+<br />  
+
+$$
+\begin{aligned} 
+  R_{i} &\sim Ordered\;logit(\phi_{i},\kappa)\\
+  \phi_{i} &=  \beta_{E}\sum^{E_{i}-1}_{j=0} \delta_{j} +\beta_{1}action_{i} + \beta_{2}contact_{i} +\beta_{3}intention_{i}  \\
+  \kappa_{k} &\sim Normal(0,1.5)\\
+  \beta_{1},\beta_{2},\beta_{3},\beta_{E} &\sim Normal(0,1)\\
+  \delta &\sim Dirichlet(\alpha)
+\end{aligned}
+$$
+<br />  
+
+ディリクレ分布とは、ベータ分布の3変量以上のバージョンであり、パラメータベクトル$\alpha$によって分布の形が変わる。図\@ref(fig:dirichlet)は、$\alpha = \{2,2,2,2,2,2,2\}$で10回シミュレーションを行った結果。    
+
+```{r dirichlet, fig.cap = "ディリクレ分布から10回シミュレートしたデータ。太線はそのうちの1つを表している。"}
+
+library(gtools)
+set.seed(1805)
+delta <- rdirichlet(10, alpha = rep(2, 7)) 
+
+delta %>% 
+  data.frame() %>% 
+  set_names(1:7) %>% 
+  mutate(row = 1:n()) %>% 
+  pivot_longer(-row, names_to = "index") %>% 
+  ggplot(aes(x = index, y = value, group = row,
+             alpha = row == 3, color = row == 3)) +
+  geom_line() +
+  geom_point() +
+  scale_alpha_manual(values = c(1/3, 1)) +
+  scale_color_manual(values = c("olivedrab3","olivedrab4")) +
+  ylab("probability") +
+  theme(legend.position = "none",
+        aspect.ratio=0.7)
+```
+
+
+それでは、モデリングを行おう。`brms`パッケージでは、順序カテゴリカルの変数を`mo()`の中に入れるだけでよい。推定には時間がかなりかかる（1時間以上かかる...）。    
+```{r}
+b12.6 <- 
+  brm(data = d4, 
+      family = cumulative,
+      response ~ 1 + action + contact + intention + mo(edu_new),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(normal(0, 0.5), class = b, 
+                      coef = moedu_new),
+                prior(dirichlet(2, 2, 2, 2, 2, 2, 2), class = simo, coef = moedu_new1)),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 12,
+       backend = "cmdstanr",
+      file = "output/Chapter12/b12.6")
+```
+
+
+結果は以下の通り（表\@ref(tab:res-b12-6)）。$\beta_{E}$の推定値が教科書よりもかなり小さい。これは、`brms`では教科書と違って平均をとっているからである。つまり7倍すれば概ね同じ値になる。係数は負なので、より教育レベルの高い人ほど倫理的に許容できないと答えるということになる。  
+```{r res-b12-6}
+fixef(b12.6) %>% 
+  data.frame() %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b12.6の結果") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+
+```{r}
+posterior_samples(b12.6) %>% 
+  transmute(bE = bsp_moedu_new * 7) %>% 
+  median_qi(.width = .89) %>% 
+  mutate_if(is.double, round, digits = 2) %>% 
+  kable(booktabs = TRUE)
+```
+
+なお、$\delta$は以下の通り(表\@ref(tab:delta-12-6)。教科書の推定値とほとんど一致している。  
+```{r, echo=FALSE}
+p <- print(b12.6)
+```
+
+```{r delta-12-6}
+p$mo %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "delta") %>% 
+  dplyr::select(-Bulk_ESS,-Tail_ESS,-Rhat) %>% 
+  kable(digits=2,
+        booktabs = TRUE,
+        caption = "b12.6によるδの推定値") %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+$\delta$の事後分布をプロットすると以下の通り（図\@ref(fig:b12-6)）。それぞれが負に相関しているのは、合計が1になるという制約があるためである（一方が大きくなると、他方は小さくなる）。
+```{r, echo=FALSE}
+my_lower <- function(data, mapping, ...) {
+  
+  # get the x and y data to use the other code
+  x <- eval_data_col(data, mapping$x)
+  y <- eval_data_col(data, mapping$y)
+  
+  # compute the correlations
+  corr <- cor(x, y, method = "p", use = "pairwise")
+  abs_corr <- abs(corr)
+  
+  # plot the cor value
+  ggally_text(
+    label = formatC(corr, digits = 2, format = "f") %>% str_replace(., "0.", "."),
+    mapping = aes(),
+    size = 4,
+    color = "olivedrab3") +
+    scale_x_continuous(NULL, breaks = NULL) +
+    scale_y_continuous(NULL, breaks = NULL)
+}
+
+my_diag <- function(data, mapping, ...) {
+  ggplot(data = data, mapping = mapping) + 
+    geom_density(fill = "olivedrab4", size = 0) +
+    scale_x_continuous(NULL, breaks = NULL) +
+    scale_y_continuous(NULL, breaks = NULL)
+}
+
+my_upper <- function(data, mapping, ...) {
+  ggplot(data = data, mapping = mapping) + 
+    geom_hex(bins = 18) +
+    geom_point(size=1/2, color = "olivedrab1") +
+    scale_x_continuous(NULL, breaks = NULL) +
+    scale_y_continuous(NULL, breaks = NULL)
+}
+```
+
+
+```{r b12-6, fig.height = 6, fig.cap = "deltaの事後分布とそれぞれの相関"}  
+
+library(GGally)
+
+delta_labels <- c("Elem", "MidSch", "SHS", "HSG", "SCol", "Bach", "Mast", "Grad")
+
+posterior_samples(b12.6) %>% 
+  dplyr::select(contains("moedu_new1")) %>% 
+  set_names(str_c(delta_labels[2:8],"~(delta[",1:7,"])")) %>% 
+  ggpairs(upper = list(continuous = my_upper),
+          diag = list(continuous = my_diag),
+          lower = list(continuous = my_lower),
+          labeller=label_parsed) +
+  theme(strip.text = element_text(size = 8))
+```
+
+## Practice  
+### 12M1  
+>  At a certain university, employees are annually rated from 1 to 4 on their productivity, with 1 being least productive and 4 most productive. In a certain department at this certain university in a certain year, the numbers of employees receiving each rating were (from 1 to 4): 12, 36, 7, 41. Compute the log cumulative odds of each rating.  
+
+```{r}
+rating <- tibble(rating = c(1,2,3,4),p = c(12,36,7,41))
+
+rating %>% 
+  mutate(prop = p/sum(p),
+         cum = cumsum(prop)) %>% 
+  mutate(logsum = logit(cum)) %>% 
+  kable(digits=2,
+        booktabs=T,
+        align = "ccccc") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+### 12M2 
+> Make a version of Figure 12.5 for the employee ratings data given just above.  
+
+```{r}
+rating %>% 
+  mutate(prop = p/sum(p),
+         cum = cumsum(prop),
+         distinct = cum-prop) %>% 
+  ggplot(aes(x = rating, y = cum))+
+  geom_point(shape=21, color="grey92", size=2.5, 
+             stroke =1.5, fill = "khaki4")+
+  geom_line(color = "khaki4")+
+  geom_linerange(aes(ymin = 0, ymax = cum),
+                 alpha = 1/2, color = "khaki2") +
+  geom_linerange(aes(x = rating + .025,
+                     ymin = ifelse(rating == 1, 0,distinct), 
+                     ymax = cum),
+                 color = "black") +
+  scale_x_continuous(breaks = 1:4) +
+  scale_y_continuous("cumulative proportion", 
+                     breaks = c(0, .5, 1), limits = c(0, 1)) +
+  geom_text(aes(x = rating + 0.2, y = cum-0.02,label=rating))+
+  theme(axis.ticks = element_blank(),
+        axis.title.y = element_text(angle = 90),
+        legend.position = "none",
+        aspect.ratio=1)
+```
+
+### 12M3  
+> Can you modify the derivation of the zero-inflated Poisson distribution (ZIPoisson) from the chapter to construct a zero-inflated binomial distribution?  
+
+まずデータが得られない確率を$p$,そのうえで1が得られる確率を$q$とする。このとき、0が得られる確率は以下の通り。
+
+$$
+Pr(0|p,q,n) = p + (1-p)(1-q)^n
+$$
+
+0以外の値(1)が得られる確率は以下の通り。  
+
+$$
+Pr(y=1, p,\lambda) = (1-p) \frac{n!}{y!(n-y)!}
+$$
+
+### 12H1  
+> In 2014, a paper was published that was entitled “Female hurricanes are deadlier than male hurricanes.” As the title suggests, the paper claimed that hurricanes with female names have caused greater loss of life, and the explanation given is that people unconsciously rate female hurricanes as less dangerous and so are less likely to evacuate. Statisticians severely criticized the paper after publication. Here, you’ll explore the complete data used in the paper and consider the hypothesis that hurricanes with female names are deadlier. Load the data with:  
+
+> Acquaint yourself with the columns by inspecting the help ?Hurricanes. In this problem, you’ll focus on predicting deaths using femininity of each hurricane’s name.Fit and interpret the simplest possible model, a Poisson model of deaths using femininity as a predictor. You can use quap or ulam. Compare the model to an intercept-only Poisson model of deaths. How strong is the association between femininity of name and deaths? Which storms does the model fit (retrodict) well? Which storms does it fit poorly?   
+
+2014年、女性名のハリケーンの方が男性名のものよりも被害が大きいという論文が出版された[@Jung2014]。論文の著者は、女性名の場合に人々は無意識にリスクを少なく見積もってしまい、避難することが少なくなってしまうと考察している。統計学者はこの論文を批判している[@Bakkensen2014]。データを見てみよう（表\@ref(tab:hurricane)）。  
+
+```{r hurricane}
+data(Hurricanes)
+dat <- Hurricanes
+head(dat) %>% 
+  kable(booktabs=T,
+        caption = "Jung et al.(2014)のデータ") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+台風の名前の女性らしさ(feminity)が死者数(death)に影響しているかをモデリングする。  
+```{r}
+dat <- dat %>% 
+  mutate(F = standardize(femininity))
+
+b12H1 <-
+  brm(data = dat,
+      family = poisson,
+      deaths ~ 1 + F,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H1")
+
+```
+
+結果は以下の通り（表\@ref(tab:res-b12H1)）。名前の女性らしさは影響しているという結果が出た。  
+
+```{r res-b12H1}
+posterior_summary(b12H1, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H1の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+  
+  
+PSISを求めてみると、$pareto$-$k$が高い点があることが分かる。  
+
+```{r, warning=TRUE}
+b12H1 <- add_criterion(b12H1, "loo")
+
+loo(b12H1) %>% 
+  pareto_k_ids(threshold = .7) -> k
+
+tibble(name = dat$name[k],
+       pareto_k = pareto_k_values(loo(b12H1))[k]) %>% 
+  kable(booktabs = TRUE,
+        digits =2) %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+  
+  
+実際に推定結果を描写してみる（図\@ref(fig:b12H1)）。傾きはかなり小さく、当てはまりもあまりよくなさそうだということが分かる。  
+```{r b12H1, fig.cap = "b12H1の結果を図示したもの \\label{fig.b12H1}"}
+nd <- tibble(F = seq(-2,1.2, length.out=100))
+
+fitted(b12H1,nd) %>% 
+  data.frame() %>% 
+  bind_cols(nd) -> fit12H1
+
+dat <- dat %>% 
+  mutate(pareto_k = pareto_k_values(loo(b12H1)))
+
+dat %>% 
+  ggplot(aes(x = F))+
+  geom_point(aes(y = deaths, size = pareto_k),
+             alpha = 1/2)+
+  geom_smooth(data = fit12H1,
+              aes(y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              stat = "identity",
+              fill = "navy",color = "navy",
+              alpha = 1/2)+
+  geom_text_repel(data = dat %>% filter(pareto_k > .7),
+                  aes(y = deaths,label = name),
+                  color = "red")+
+  theme(aspect.ratio=1,
+        legend.position = "none")+
+  scale_y_continuous(breaks= seq(0,250,50))+
+  labs(x = "femininity (std)",
+       subtitle = "Poisson")
+```
+
+切片だけのモデルと比較してみると、いちおう説明変数がある方が予測は向上している。
+```{r}
+b12H1_2 <- 
+  brm(data = dat,
+      family = poisson,
+      deaths ~ 1,
+      prior = prior(normal(3, 0.5),class=Intercept),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H1_2")
+
+b12H1_2 <- add_criterion(b12H1_2, "loo")
+```
+
+
+```{r}
+loo_compare(b12H1, b12H1_2) %>% 
+  data.frame() %>% 
+  dplyr::select(-se_p_loo) %>% 
+  kable(booktabs = TRUE,
+        digits=2) %>% 
+  kable_styling(latex_options = "hold_position")
+```
+
+### 12H2  
+> Counts are nearly always over-dispersed relative to Poisson. So fit a gamma-Poisson (aka negative-binomial) model to predict deaths using femininity. Show that the over-dispersed model no longer shows as precise a positive association between femininity and deaths, with an 89% interval that overlaps zero. Can you explain why the association diminished in strength?  
+
+負の二項分布へのあてはめを行う。  
+```{r}
+b12H2 <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H2")
+```
+
+結果、先ほどよりも係数が小さくなり、89%信用区間も0をまたいでいることが分かる(表\@ref(tab:res-b12H2))。  
+
+```{r res-b12H2}
+posterior_summary(b12H2, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H2の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+一方、$pareto$-$k$が0.7以上のデータは一つもなくなり、過分散は解消された。  
+```{r}
+b12H2 <- add_criterion(b12H2, "loo")
+
+loo(b12H2) %>% 
+  pareto_k_ids(threshold = .7) 
+```
+
+結果を図示すると以下の通り（図\@ref(fig:b12H2)。推定の幅が広くなっており、女性らしさの影響はほとんどないことが分かる。  
+```{r b12H2, fig.cap = "b12H2の結果を図示したもの"}
+nd <- tibble(F = seq(-2,1.2, length.out=100))
+
+fitted(b12H2,nd) %>% 
+  data.frame() %>% 
+  bind_cols(nd) -> fit12H2
+
+dat <- dat %>% 
+  mutate(pareto_k = pareto_k_values(loo(b12H2)))
+
+dat %>% 
+  ggplot(aes(x = F))+
+  geom_point(aes(y = deaths, size = pareto_k),
+             alpha = 1/2)+
+  geom_smooth(data = fit12H2,
+              aes(y = Estimate, ymin = Q2.5, ymax = Q97.5),
+              stat = "identity",
+              fill = "navy",color = "navy",
+              alpha = 1/3)+
+  theme(aspect.ratio=1,
+        legend.position = "none")+
+  scale_y_continuous(breaks= seq(0,250,50))+
+  labs(x = "femininity (std)",
+       subtitle = "negative binomial")
+```
+
+
+### 12H3  
+> In order to infer a strong association between deaths and femininity, it’s necessary to include an interaction effect. In the data, there are two measures of a hurricane’s potential to cause death: damage_norm and min_pressure. Consult ?Hurricanes for their meanings. It makes some sense to imagine that femininity of a name matters more when the hurricane is itself deadly. This implies an interaction between femininity and either or both of damage_norm and min_pressure. Fit a series of models evaluating these interactions. Interpret and compare the models. In interpreting the estimates, it may help to generate counterfactual predictions contrasting hurricanes with masculine and feminine names. Are the effect sizes plausible?  
+
+台風の規模そのものの影響も考慮したモデルを考えるため、min pressure（小さいほど規模は大きい）も入れたモデルを考える。交互作用ありのモデル(b12H3)と交互作用なしのモデル(b12H3b)の両方を考える。  
+
+```{r}
+dat %>% 
+  mutate(M = standardize(min_pressure)) -> dat
+
+b12H3 <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F + M + F:M,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H3")
+
+b12H3b <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F + M,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H3b")
+```
+
+交互作用ありモデルの結果は以下の通り（表\@ref(tab:res-b12H3)）。交互作用がかなり効いているという結果になった。この結果は、規模が小さくなるほど女性らしさが死者数に与える影響が強くなる、もしくは名前が女性らしくなるほど規模が死者数に与える影響が弱くなることを意味している。  
+```{r res-b12H3}
+posterior_summary(b12H3, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H3の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+当てはまりの悪い点は1点のみ。
+```{r}
+b12H3 <- add_criterion(b12H3, "loo")
+
+loo(b12H3) %>% 
+  pareto_k_ids(threshold = .7)
+```
+
+交互作用も入れた方が予測は若干向上する(ただし、ほとんど変わらない)。  
+```{r}
+b12H3b <- add_criterion(b12H3b, "loo")
+
+loo_compare(b12H3,b12H3b, b12H2) %>% 
+  data.frame() %>% 
+  kable(booktabs = TRUE,
+        digits=2,
+        caption = "b12H3,b12H3b, b12H2の比較") %>% 
+  kable_styling(latex_options = "hold_position")
+```
+
+名前が女性らしいとき(F = 1)と最も男性らしいとき(F = -1)で台風の規模が死者数に与える影響が異なるかを図示すると以下のようになる（図\@ref(fig:12H3)）。  
+
+```{r 12H3, fig.cap = "b12H3の推定結果。点は、Fが0以下のものを水色、0以上のものをピンクとしており、回帰曲線は水色がF=-1, ピンクがF=1のときを表す。塗りつぶしは89%信用区間である。"}
+
+nd <- crossing(F = c(-1,1),
+               M = seq(-3,2,length.out=100))
+
+fitted(b12H3, nd, probs=c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  mutate(MorF = factor(F)) -> fit12H3
+
+dat %>% 
+  mutate(MorF = ifelse(F > mean(F),"1","-1")) %>% 
+  ggplot(aes(x = M))+
+  geom_point(aes(y=deaths, color = MorF),
+             shape =1, stroke = 1.5, size=1)+
+  geom_smooth(data = fit12H3,
+              aes(y = Estimate,
+                  ymin = Q5.5,
+                  ymax = Q94.5,
+                  color = MorF,
+                  fill = MorF,
+                  linetype=MorF),
+              stat = "identity")+
+  scale_color_manual(values = c("steelblue1","lightcoral"))+
+  scale_fill_manual(values = c("steelblue1","lightcoral"))+
+  coord_cartesian(ylim = c(0,300))+
+  labs(x="minimum pressure (std)")+
+  theme(aspect.ratio=1,
+        legend.position = "none")
+```
+  
+  
+続いて、台風の損害(ドル換算)と名前の女性らしさの交互作用を考慮したモデルを考える。  
+
+```{r}
+dat %>% 
+  mutate(D = standardize(damage_norm)) -> dat
+
+b12H3_2 <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F + D + F:D,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H3_2")
+
+b12H3_2b <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F + D,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H3_2b")
+```
+  
+交互作用ありモデルの結果は以下の通り（表\@ref(tab:res-b12H3-2)）。被害の大きさがかなり強く影響しており、名前の女性らしさの影響が小さくなっていることが分かる。交互作用もありそう。  
+   
+```{r res-b12H3-2}  
+posterior_summary(b12H3_2, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H3_2の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))  
+```
+  
+  
+当てはまりの悪い点はなさそう。 
+```{r}
+b12H3_2 <- add_criterion(b12H3_2, "loo")
+b12H3_2b <- add_criterion(b12H3_2b, "loo")
+
+loo(b12H3) %>% 
+  pareto_k_ids(threshold = .7)
+```
+
+交互作用が入ったモデルの方が若干よいが、あまり変わらない。  
+```{r}
+loo_compare(b12H3_2,b12H3_2b) %>% 
+  data.frame() %>% 
+  kable(booktabs = TRUE,
+        digits=2)
+```
+  
+
+名前が女性らしいとき(F = 1)と最も男性らしいとき(F = -1)で被害規模が死者数に与える影響が異なるかを図示すると以下のようになる（図\@ref(fig:12H3-2)）。名前が女性らしいときに若干死者数は大きくなる。  
+```{r 12H3-2, fig.cap = "b12H3_2の推定結果。点は、Fが0以下のものを水色、0以上のものをピンクとしており、回帰曲線は水色がF=-1, ピンクがF=1のときを表す。塗りつぶしは89%信用区間である。"}
+
+nd <- crossing(F = c(-1,1),
+               D = seq(-1,5.5,length.out=100))
+
+fitted(b12H3_2, nd, probs=c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  mutate(MorF = factor(F)) -> fit12H3_2
+
+dat %>% 
+  mutate(MorF = ifelse(F > mean(F),"1","-1")) %>% 
+  ggplot(aes(x = D))+
+  geom_point(aes(y=deaths, color = MorF),
+             shape =1, stroke = 1.5, size=1)+
+  geom_smooth(data = fit12H3_2,
+              aes(y = Estimate,
+                  ymin = Q5.5,
+                  ymax = Q94.5,
+                  color = MorF,
+                  fill = MorF,
+                  linetype=MorF),
+              stat = "identity")+
+  scale_color_manual(values = c("steelblue1","lightcoral"))+
+  scale_fill_manual(values = c("steelblue1","lightcoral"))+
+  coord_cartesian(ylim = c(0,300))+
+  labs(x = "damage (std)")+
+  theme(aspect.ratio=1,
+        legend.position = "none")
+```
+  
+  
+ここで、これまで出てきたすべての変数とその交互作用を入れたモデルを考える(なお、MとDの交互作用は入れない)。
+```{r}
+b12H3_all <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F + D + F:D + M + F:M,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H3_all")
+
+b12H3_all <- add_criterion(b12H3_all, "loo")
+```
+
+
+これまでの全てのモデルのPSISを比べてみると、全部入れたモデル(`b12H3_all`)が最も予測がよいことが分かる。`b12H3_2`と`b12H3_2b`はそれより少し悪くなり、それ以外はもっと悪い。  
+```{r}
+loo_compare(b12H3_2,b12H2,b12H3, b12H3b, b12H3_2b, b12H3_all) %>%
+  data.frame() %>% 
+  kable(booktabs = TRUE,
+        digits=2,
+        caption = "全モデルの比較") %>% 
+  kable_styling(latex_options = "hold_position")
+```
+
+
+全部入れたモデルの結果は以下の通り（表\@ref(tab:res-b12H3-all)）。D, Mが強く効いており、D:F, M:Fも効いていそう。
+```{r res-b12H3-all}
+posterior_summary(b12H3_all, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H3_allの結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+
+### 12H4  
+> In the original hurricanes paper, storm damage (damage_norm) was used directly. This assumption implies that mortality increases exponentially with a linear increase in storm strength, because a Poisson regression uses a log link. So it’s worth exploring an alternative hypothesis: that the logarithm of storm strength is what matters. Explore this by using the logarithm of damage_norm as a predictor. Using the best model structure from the previous problem, compare a model that uses log(damage_norm) to a model that uses damage_norm directly. Compare their DIC/WAIC values as well as their implied predictions. What do you conclude?  
+
+damageの対数をとったものを説明変数とする。
+```{r}
+dat <-  dat %>% 
+  mutate(logD = standardize(log(damage_norm)))
+
+b12H4 <-
+  brm(data = dat,
+      family = negbinomial,
+      deaths ~ 1 + F + logD + F:logD + M + F:M,
+      prior = c(prior(normal(3, 0.5),class=Intercept),
+                prior(normal(0,1),class =b),
+                prior(exponential(1), class = shape)),
+       backend = "cmdstanr",
+      seed=11, file = "output/Chapter12/b12H4")
+
+b12H4 <- add_criterion(b12H4, "loo")
+```
+
+`b12H3_all`とモデル比較をしてみると、`b12H4`の方がかなり良いことが分かる。     
+```{r}
+loo_compare(b12H3_all, b12H4) %>%
+  data.frame() %>% 
+  kable(booktabs = TRUE,
+        digits=2) %>% 
+  kable_styling(latex_options = "hold_position")
+```
+  
+  
+結果は以下の通り（表\@ref(tab:res-b12H4)）。logD以外はほとんど推定値が0に近くなり、いずれも89%CIが0にかぶっている。
+```{r res-b12H4}  
+posterior_summary(b12H4, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H4の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+結果を図示する（図\@ref(fig:12H4)）。データにはかなり良く当てはまっていることが分かる。名前の女性らしさによる影響はほとんどない。 
+```{r 12H4, fig.cap = "b12H3_2の推定結果。点は、Fが0以下のものを水色、0以上のものをピンクとしており、回帰曲線は水色がF=-1, ピンクがF=1のときを表す。塗りつぶしは89%信用区間である。}"}
+
+nd <- crossing(F = c(-1,1),
+               logD = seq(-3.5,2,length.out=100),
+               M = 0)
+
+fitted(b12H4, nd, probs=c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  mutate(MorF = factor(F)) -> fit12H4
+
+dat %>% 
+  mutate(MorF = ifelse(F > mean(F),"1","-1")) %>% 
+  ggplot(aes(x = logD))+
+  geom_point(aes(y=deaths, color = MorF),
+             shape =1, stroke = 1.5, size=1)+
+  geom_smooth(data = fit12H4,
+              aes(y = Estimate,
+                  ymin = Q5.5,
+                  ymax = Q94.5,
+                  color = MorF,
+                  fill = MorF,
+                  linetype=MorF),
+              stat = "identity")+
+  scale_color_manual(values = c("steelblue1","lightcoral"))+
+  scale_fill_manual(values = c("steelblue1","lightcoral"))+
+  coord_cartesian(ylim = c(0,300))+
+  labs(x = "damage (std)")+
+  theme(aspect.ratio=1,
+        legend.position = "none")
+```
+
+### 12H5  
+>  One hypothesis from developmental psychology, usually attributed to Carol Gilligan, proposes that women and men have different average tendencies in moral reasoning. Like most hypotheses in social psychology, it is merely descriptive. The notion is that women are more concerned with care (avoiding harm), while men are more concerned with justice and rights. Culture-bound nonsense? Yes. Descriptively accurate? Maybe.  
+Evaluate this hypothesis, using the Trolley data, supposing that contact provides a proxy for physical harm. Are women more or less bothered by contact than are men, in these data? Figure out the model(s) that is needed to address this question.
+
+性別とcontactを説明変数とし、交互作用があるかを調べる。  
+```{r}
+d4 <- d4 %>% 
+  mutate(gid = ifelse(male==1,"2","1"))
+
+b12H5 <- 
+  brm(data = d4, 
+      family = cumulative,
+      response ~ 1 + contact + gid + contact:gid,
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 1), class = b)),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 12,
+       backend = "cmdstanr",
+      file = "output/Chapter12/b12H5")
+```
+
+結果は以下の通り（表\@ref(tab:res-b12H5)）。交互作用が影響していそう。
+男性の方がむしろcontactの効果を強く受けているという結果。
+```{r res-b12H5}
+posterior_summary(b12H5, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H5の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+結果は以下の通り（図\@ref(fig:b12H5)）。あまり交互作用はよくわからない。
+```{r b12H5, fig.cap = "b12H5の結果を図示したもの。"}
+nd <- crossing(gid = c("1","2"),
+             contact = c(0,1)) %>% 
+  mutate(combi = str_c(gid, contact, sep="_"))
+
+f <- fitted(b12H5, nd, summary= F)
+
+f2 <- rbind(f[,,1],
+            f[,,2],
+            f[,,3],
+            f[,,4],
+            f[,,5],
+            f[,,6],
+            f[,,7]) %>% 
+  data.frame() %>% 
+  set_names(nd$combi) %>% 
+  mutate(response = rep(1:7, each =4000),
+         iter = rep(1:4000, times =7)) %>%
+  pivot_longer(-c(response, iter),
+               names_to = c("gid", "contact"),
+               names_sep="_",
+               values_to = "p")
+  
+f2 %>% 
+  filter(response < 7) %>% 
+  mutate(facet = ifelse(gid == "1","female","male")) %>% 
+  group_by(iter, facet, contact) %>% 
+  arrange(iter, facet, contact,response) %>% 
+  mutate(prob = cumsum(p)) %>% 
+  ungroup() %>% 
+  nest(data = -iter) %>% 
+  slice_sample(n=100) %>% 
+  unnest(data) %>% 
+  mutate(contact = as.integer(contact)) %>% 
+  ggplot(aes(x = contact, y = prob))+
+  geom_line(aes(group=interaction(iter, response),
+                color = prob),
+            alpha = 1/10)+
+  geom_point(data =d4 %>% 
+               group_by(gid, contact) %>% 
+               count(response) %>% 
+               mutate(prob = cumsum(n/sum(n)),
+              facet=ifelse(gid == "1","female","male")) %>% 
+               filter(response<7),
+             color = "olivedrab3")+
+  scale_color_gradient(low = "olivedrab4",
+                       high = "olivedrab1")+
+  scale_x_continuous("contact", breaks = 0:1) +
+scale_y_continuous(breaks = c(0, .5, 1), limits = 0:1) +
+theme(legend.position = "none",
+strip.background = element_blank()) +
+facet_wrap(~ facet)
+```
+
+
+予測分布を表すと以下のようになる図\@ref(fig:pred-b12H5)。全体として女性の方が道徳的に許容できない人が多い（小さいresponseの割合が高い）が、contactの効果は男性の方がある。  
+```{r pred-b12H5, fig.cap = "b12H5による予測分布。黒いバーがcontactが0のとき、青いバーがcontactが1の時を表す。"}
+predict <- predict(b12H5, nd, scale="response", summary=F)
+
+predict %>%
+  data.frame() %>%
+  set_names(pull(nd, combi)) %>%
+  pivot_longer(everything(),
+               names_to = c("gid", "contact"),
+               names_sep="_",
+               values_to = "response") %>%
+  mutate(facet = ifelse(gid == "1","female","male"))%>%
+  ggplot(aes(x = response, fill = contact)) +
+  geom_bar(width = 1/3, position = position_dodge(width = .4)) +
+  scale_fill_manual(values = c("black", "blue")) +
+  scale_x_continuous("response", breaks = 1:7) +
+  theme(legend.position = "none",
+        strip.background = element_blank()) +
+  facet_wrap(~ facet) 
+```
+
+
+### 12H6  
+> The data in data(Fish) are records of visits to a national park. See ?Fish for details. The question of interest is how many fish an average visitor takes per hour, when fishing. The problem is that not everyone tried to fish, so the fish_caught numbers are zero-inflated. As with the monks example in the chapter, there is a process that determines who is fishing (working) and another process that determines fish per hour (manuscripts per day), conditional on fishing (working). We want to model both. Otherwise we’ll end up with an underestimate of rate of fish extraction from the park.  
+You will model these data using zero-inflated Poisson GLMs. Predict fish_caught as a function of any of the other variables you think are relevant. One thing you must do, however, is use a proper Poisson offset/exposure in the Poisson portion of the zero-inflated model. Then use the hours variable to construct the offset. This will adjust the model for the differing amount of time individuals spent in the park.
+
+キャンプ場を訪れた人たちが魚をどれだけ釣ったのかをモデリングする。問題は、キャンプ場を訪れたすべての人が魚釣りをしたわけではないということである。よって、ゼロ過剰ポワソンモデルを用いてモデリングを行う。  
+含まれる変数は以下のものである。ここでは、図\@ref(fig:plot-fish)をもとに`camper`と`child`, `person`が釣りをするか否かの判断に影響し、`livebait`と`person`, `camper`, `child`が釣った魚の数に影響していたとする。`hours`は宿泊した客とそうでない客で大きく異なるため除外する。  
+
+- livebait: 魚釣りに生餌を使ったか否か。  
+- camper: キャンプをするか否か。  
+- person: 大人の数。  
+- child: 子供の数。  
+- hours: キャンプ場にいた時間。  
+
+
+```{r}
+data(Fish)
+dat3 <- Fish
+
+head(dat3) %>% 
+  kable(booktabs=T,
+        caption = "データ`Fish`") %>% 
+  kable_styling(latex_options = c("hold_position","stripe"))
+```
+
+
+```{r plot-fish, fig.cap = "データ`Fish`のplot"}
+
+dat3 %>% 
+  pivot_longer(-c(fish_caught,hours)) %>% 
+  ggplot(aes(x=value, y = fish_caught))+
+  geom_point(aes(shape=name), color = "navy", 
+             size=3, alpha = 1/2)+
+  labs(y = "Number of fish")+
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size=12),
+        legend.position = "none", aspect.ratio=0.7)+
+  facet_wrap(~name, nrow = 2, scales = "free_x")
+```
+
+それではモデリングを行う。  
+```{r}
+dat3 %>% 
+  mutate(C = ifelse(camper=="1","2","1"),
+         L = ifelse(livebait == "1","2","1")) -> dat3
+
+b12H6 <- brm(data = dat3,
+             family = zero_inflated_poisson,
+             bf(fish_caught ~ C + child +L + persons,
+                zi ~ C + child + persons),
+             prior = c(prior(normal(3,0.5), class = Intercept),
+                       prior(normal(0, 10), class = b),
+                       prior(normal(0, 1.5), class = Intercept,
+                             dpar = zi),
+                       prior(normal(0, 10), class =b, dpar=zi)),
+              backend = "cmdstanr",
+             seed = 11, file = "output/Chapter12/b12H6")
+```
+
+
+結果は以下の通り（表\@ref(tab:res-b12H6)）。全ての説明変数が影響を与えていることが分かる。  
+```{r res-b12H6}
+posterior_summary(b12H6, probs = c(0.055,0.945)) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  filter(parameter!="lp__") %>% 
+  kable(booktabs=T,
+        digits=2,
+        caption = "b12H5の結果") %>% 
+  kable_styling(latex_options = c("stripe","hold_position"))
+```
+
+```{r}
+conditional_effects(b12H6) %>% 
+  plot(points = TRUE, jitter_width = 0.1,
+       stype = "contour", theme=theme(aspect.ratio=1))
+```
+
+
+### 12H7  
+> In the trolley data we saw how education level (models as an ordered category) is associated with responses. But is this association causal? One possible confound is that education is also associated with age, through a causal process: People are
+older when they finish school thatn when they begin it. Reconsider the Trolley data in this light. Draw a DAG that represents hypothetical causal relationships among response, education, and age. Which statical model or models do you need to evaluate the causal influence of education on responses ? Fit these models to the trolley data. This will adjust the model for the differing amount of time individuals spent in the park. 
+
+```{r}
+d4 <- mutate(d4, A = standardize(age))
+
+b12H7 <- 
+  brm(data = d4, 
+      family = cumulative,
+      response ~ 1 + action + contact + intention +A+ mo(edu_new),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(normal(0, 0.5), class = b, 
+                      coef = moedu_new),
+                prior(dirichlet(2, 2, 2, 2, 2, 2, 2), class = simo, coef = moedu_new1)),
+      iter = 2000, warmup = 1000, cores = 4, chains = 4,
+      seed = 12,
+       backend = "cmdstanr",
+      file = "output/Chapter12/b12H7")
+```
+
+結果は以下の通り（表\@ref(tab:res-b12H7)）。年齢を説明変数に入れると、学歴の影響は小さくなり、係数の正負も反対になった。 
+```{r res-b12H7}
+fixef(b12H7) %>% 
+  data.frame() %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b12H7の結果。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+```{r}
+posterior_samples(b12H7) %>% 
+  transmute(bE = bsp_moedu_new * 7) %>% 
+  median_qi(.width = .89) %>% 
+  mutate_if(is.double, round, digits = 2) %>% 
+  kable(booktabs=T) %>% 
+  kable_styling(latex_options = "hold_position")
+```
+
+なお、$\delta$は以下の通り(表\@ref(tab:delta-12H7))。 
+```{r, echo=FALSE}
+p <- print(b12H7)
+```
+
+```{r delta-12H7}
+p$mo %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "delta") %>% 
+   dplyr::select(-Bulk_ESS,-Tail_ESS,-Rhat) %>% 
+  kable(digits=2,
+        booktabs = TRUE,
+        caption = "b12.6によるδの推定値") %>%
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+```{r, fig.height = 5}
+delta_labels <- c("Elem", "MidSch", "SHS", "HSG", "SCol", "Bach", "Mast", "Grad")
+
+posterior_samples(b12H7) %>% 
+   dplyr::select(contains("moedu_new1")) %>% 
+  set_names(str_c(delta_labels[2:8],"~(delta[",1:7,"])")) %>% 
+  ggpairs(upper = list(continuous = my_upper),
+          diag = list(continuous = my_diag),
+          lower = list(continuous = my_lower),
+          labeller=label_parsed) +
+  theme(strip.text = element_text(size = 8))
+```
+

@@ -1,0 +1,1976 @@
+# Models with Memory  
+
+## Multilevel tadpoles  
+オタマジャクシの生存率に関するデータを用いる[@Vonesh2005]。各行はそれぞれ異なる水槽を表しおり、水槽ごとに観測できない違いがあると考える。
+```{r}
+data(reedfrogs)
+
+d <- reedfrogs
+head(d)
+
+d %>% 
+  mutate(tank = 1:nrow(d)) ->d
+```
+
+まずは、それぞれの水槽が違う切片を持つモデルを考える。  
+
+$$
+\begin{aligned}  
+  S_{i} &\sim Binomial(N_{i}, p_{i})\\
+  logit(p_{i}) &= \alpha_{tank[i]}\\
+   \alpha_{j} &\sim Normal(0,1.5) \;\; for \; j = 1 .. 48 
+\end{aligned}
+$$
+<br />  
+
+```{r}
+b13.1 <- 
+  brm(data = d,
+      family = binomial,
+      formula = surv | trials(density) ~ 0 + factor(tank),
+      prior(normal(0,1.5), class = b),
+      backend = "cmdstanr",
+      seed = 13, file = "output/Chapter13/b13.1")
+```
+
+結果は以下の通り（表\@ref(tab:res-b13-1)）。48個の切片が推定されている。
+```{r res-b13-1, echo = FALSE}
+fixef(b13.1) %>% 
+  data.frame() %>% 
+  head(10) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.1の結果。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+```{r, echo = FALSE}
+library(ggthemes)
+
+tibble(est = fixef(b13.1)[,1]) %>% 
+  mutate(p = inv_logit_scaled(est)) %>% 
+  pivot_longer(everything()) %>% 
+  mutate(name = if_else(name == "p", "expected survival probability", "expected survival log-odds")) %>% 
+  ggplot(aes(x = value, fill = name)) +
+  stat_dots(size=0)+
+  scale_fill_manual(values=c("orange1", "orange4"))+
+  labs(title = "Tank-level intercepts from the no-pooling model",
+       subtitle = "Notice now inspecting the distributions of the posterior means can offer insights you\nmight not get if you looked at them one at a time.") +
+  theme_gray()+
+  theme(legend.position = "none",
+        panel.grid = element_blank())+
+  facet_wrap(~name, scales = "free_x")+
+  theme(strip.background = element_blank())
+```
+
+
+続いて、階層モデルを考える。  
+
+$$
+\begin{aligned}  
+  S_{i} &\sim Binomial(N_{i}, p_{i})\\
+  logit(p_{i}) &= \alpha_{tank[i]}\\
+   \alpha_{j} &\sim Normal(\bar{\alpha},\sigma) \\
+   \bar{\alpha} &\sim Normal(0,1.5)\\
+   \sigma &\sim Exponential(1)
+\end{aligned}
+$$
+<br />  
+
+```{r}
+b13.2 <- 
+  brm(data =d,
+      family = binomial, 
+      formula = surv | trials(density) ~ 1 + (1|tank),
+      prior = c(prior(normal(0,1.5), class = Intercept),
+                prior(exponential(1), class = sd)),
+      iter = 5000, warmup =1000, sample_prior = "yes",
+      backend = "cmdstanr",
+      seed = 13, file = "output/Chapter13/b13.2")
+```
+
+結果は以下の通り（表\@ref(tab:res-b13-2)）。  
+
+```{r res-b13-2, echo = FALSE}
+posterior_summary(b13.2) %>% 
+  data.frame() %>% 
+  head(10) %>% 
+  rownames_to_column(var = "param") %>% 
+  filter(param != "lp__") %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.1の結果。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+モデルを比較してみる（表\@ref(tab:compare-13-1-13-2)）。b13.2の方が圧倒的に良いモデル。  
+
+```{r compare-13-1-13-2, echo = FALSE}
+b13.1 <- add_criterion(b13.1, "waic")
+b13.2 <- add_criterion(b13.2, "waic")
+
+w <- loo_compare(b13.1, b13.2, criterion = "waic")
+
+print(w, simplify = FALSE) %>% 
+  data.frame() %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.1とb13.2のモデル比較。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+
+モデルの推定結果は、実データよりも事後分布の中央値に近づいている（= 縮合）。また、小さい水槽（= サンプルサイズが小さい）ではより縮合が起きている。これは、サンプルサイズが小さいほど結果に対する影響が小さいため。さらに、事後分布中央値から離れているデータほど縮合が起きている。  　
+```{r, echo = FALSE}
+post <- posterior_samples(b13.2)
+
+post_mdn <- 
+  coef(b13.2, robust = TRUE)$tank[,,] %>% 
+  data.frame() %>% 
+  bind_cols(d) %>% 
+  mutate(post_mdn = inv_logit_scaled(Estimate))
+
+post_mdn %>% 
+  ggplot(aes(x=tank))+
+  geom_hline(aes(yintercept = inv_logit_scaled(median(post$b_Intercept))),
+             linetype ="dotted")+
+  geom_vline(xintercept = c(16.5, 32.5), size = 1/4, color = "grey25")+
+  geom_point(aes(y = propsurv), color = "orange2")+
+  geom_point(aes(y=post_mdn), shape=1)+
+  annotate(geom = "text", 
+           x = c(8, 16 + 8, 32 + 8), y = 0, 
+           label = c("small tanks", "medium tanks", "large tanks")) +
+  scale_x_continuous(breaks = c(1, 16, 32, 48)) +
+  scale_y_continuous(breaks = 0:5 / 5, limits = c(0, 1)) +
+  labs(title = "Multilevel shrinkage!",
+       subtitle = "The empirical proportions are in orange while the model-\nimplied proportions are the black circles. The dashed line is\nthe model-implied average survival proportion.") +
+  theme(panel.grid.major = element_blank())
+```
+  
+  
+```{r, echo = FALSE}
+post %>% 
+  mutate(iter = 1:n()) %>% 
+  slice_sample(n =100) %>% 
+  tidyr::expand(nesting(iter, b_Intercept, sd_tank__Intercept),
+         x = seq(-4, 5, length.out=100)) %>% 
+  mutate(density = dnorm(x, b_Intercept, sd_tank__Intercept)) %>% 
+  ggplot(aes(x = x, y = density, group = iter))+
+  geom_line(alpha = .2, color = "orange2")+
+  labs(title = "Population survival distribution",
+       subtitle = "log-odds scale") +
+  coord_cartesian(xlim = c(-3, 4)) -> p1
+
+p2 <-
+  post %>% 
+  slice_sample(n = 8000, replace = TRUE) %>% 
+  mutate(sim_tanks = rnorm(n(), mean = b_Intercept, sd = sd_tank__Intercept)) %>% 
+  ggplot(aes(x = inv_logit_scaled(sim_tanks))) +
+  geom_density(size = 0, fill = "orange2", adjust = 0.1, color = "orange") +
+  labs(title = "Probability of survival",
+       subtitle = "transformed by the inverse-logit function")
+
+(p1 + p2) &
+  theme(plot.title = element_text(size = 12),
+        plot.subtitle = element_text(size = 10))
+```
+
+## Varying effects and the underfitting/overfitting trade-off 　
+先ほどのオタマジャクシの例で、もしすべてのデータをプールしたとすると、全体の平均はより正確に推定できるが、それぞれの水槽の平均にはあまり当てはまらない（underfitting）。一方、もしすべての水槽に異なる切片を推定するとすれば、それぞれの水槽の平均値を推定できるがデータ数が少ないので不正確になってしまう（overfitting）。階層モデルを用いれば、overfittingとunderfittingの両方を防ぐことができる。それぞれのクラスター内のデータ数が十分に多ければすべての水槽に異なる切片を推定するモデルの結果に近くなるが、少なければ縮合が起きてoverfittingを防いでくれる。  
+
+### The model  
+b13.2のモデル式を用いてシミュレーションデータを作成する。
+
+```{r}
+a_bar <- 1.5
+sigma <- 1.5
+n_ponds <- 60
+
+set.seed(55)
+
+dsim <- 
+  tibble(pond = 1:n_ponds,
+         ni= rep(c(5,10,25,35),each=n_ponds/4) %>% as.integer(),
+         true_a = rnorm(n = n_ponds, mean = a_bar, sd = sigma))
+
+head(dsim)
+```
+
+### Simulate survivors  
+生存数をシミュレートする。  
+```{r}
+set.seed(5005)
+
+dsim <- 
+  dsim %>% 
+  mutate(si = rbinom(n = n(), prob = inv_logit_scaled(true_a), size=ni),
+         p_nopool = si/ni)
+```
+
+```{r, echo = FALSE}
+slice_sample(dsim, n = 10) %>% 
+  kable(booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+#### Computing the non-pooling estimates  
+それでは、実際にモデリングを行う。
+
+```{r}
+b13.3 <- 
+  brm(data = dsim,
+      family = binomial,
+      formula = si|trials(ni) ~ 1 + (1|pond),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(exponential(1), class = sd)),
+      iter = 5000, warmup =1000,
+      backend = "cmdstanr",
+      seed = 13, file = "output/Chapter13/b13.3")
+```
+
+結果は以下の通り（表\@ref(tab:res-b13-3)）。   
+
+```{r res-b13-3, echo = FALSE}
+posterior_summary(b13.3) %>% 
+  data.frame() %>% 
+  head(10) %>% 
+  round(2) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.3の結果。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+```{r}
+p_partpool <- 
+  coef(b13.3)$pond[, , ] %>% 
+  data.frame() %>%
+  transmute(p_partpool = inv_logit_scaled(Estimate))
+
+dsim2 <- 
+  dsim %>%
+  bind_cols(p_partpool) %>% 
+  mutate(p_true = inv_logit_scaled(true_a)) %>%
+  mutate(nopool_error   = abs(p_nopool   - p_true),
+         partpool_error = abs(p_partpool - p_true))
+
+slice_sample(dsim2 %>% dplyr::select(pond, p_partpool, p_true,
+                              p_nopool, nopool_error, 
+                              partpool_error), n=10)
+```
+
+実際の値（青）も推定値（黒）も水槽内の個体数が多いほど真の確率に近づいている。また、推定値の方がほとんどの場合真の値に近くなっている。これは、縮合によってoverfittingが抑えられていることを示している。加えて、実際の値と推定値の違いは水槽内の個体数が多いほど小さくなっている。これは、サンプルサイズが小さいほど縮合が生じていることを示している。  
+```{r, fig.height=5, echo = FALSE}
+dsim2 %>% 
+  group_by(ni) %>% 
+  mutate(ave_nopool = mean(nopool_error),
+         ave_partpool = mean(partpool_error)) -> dsim2
+
+dsim2 %>% 
+  ggplot(aes(x = pond))+
+  geom_point(aes(y = nopool_error), shape = 19, 
+             color="navy",size=2)+
+  geom_point(aes(y = partpool_error), shape =1, 
+             color = "black", size=2)+
+  geom_vline(xintercept = c(15.5,30.5,45.5))+
+  geom_line(aes(y= ave_nopool, group = ni), color = "navy")+
+  geom_line(aes(y= ave_partpool, group =ni), color = "black",
+            linetype = "longdash")+
+  annotate(geom = "text", 
+           x = c(15 - 7.5, 30 - 7.5, 45 - 7.5, 60 - 7.5), y = .45,
+           label = c("tiny (5)", "small (10)", "medium (25)", 
+                     "large (35)")) +
+  scale_x_continuous(breaks = c(1, 10, 20, 30, 40, 50, 60)) +
+  labs(title = "Estimate error by model type",
+       subtitle = "The horizontal axis displays pond number. The vertical axis measures\nthe absolute error in the predicted proportion of survivors, compared to\nthe true value used in the simulation. The higher the point, the worse\nthe estimate. No-pooling shown in orange. Partial pooling shown in black.\nThe orange and dashed black lines show the average error for each kind\nof estimate, across each initial density of tadpoles (pond size).",
+       y = "absolute error") +
+  theme(panel.grid.major = element_blank(),
+        plot.subtitle = element_text(size = 10))
+```
+   
+   
+## More than one type of cluster  
+Chapter11で用いたチンパンジーの実験データ[@Silk2005]を用いて、2つ以上のクラスターのあるデータを扱う。データ内には対象個体（`actor`）と実験日（`block`）の2つのクラスターが存在する。  
+
+$$
+\begin{aligned}  
+  L_{i} &\sim Binomial(1,p_{i})\\
+  logit(p_{i}) &= \bar{\alpha} +  \beta_{treatment[i]}+z_{actor[i]}\sigma_{\alpha} + x_{block[i]}\sigma_{\gamma}\\
+  \beta_{j} &\sim Normal(0,0.5)\\
+  \bar{\alpha}_{} &\sim Normal(0,1.5)\\
+  z_{j} &\sim Normal(0,1)\\
+  x_{j} &\sim Normal(0,1)\\
+  \sigma_{\alpha} &\sim Exponential(1)\\
+  \sigma_{\gamma} &\sim Exponential(1)\\
+\end{aligned}
+$$
+<br />  
+
+```{r}
+data("chimpanzees")
+d2 <- chimpanzees
+
+d2 %>% 
+  mutate(treatment = factor(1 + prosoc_left + 2*condition),
+         block = factor(block),
+         actor = factor(actor)) -> d2
+
+head(d2)
+```
+
+それでは、モデルを回す。  
+```{r}
+b13.4 <- 
+  brm(data = d2,
+      family = bernoulli,
+      bf(pulled_left ~ a + b,
+         a ~ 1 + (1|actor) + (1|block),
+         b ~ 0 + treatment,
+         nl = TRUE),
+      prior = c(prior(normal(0, 0.5), nlpar = b),
+                prior(normal(0, 1.5), class = b, 
+                      coef = Intercept, nlpar = a),
+                prior(exponential(1), class = sd, 
+                      group = actor, nlpar = a),
+                prior(exponential(1), class = sd, 
+                      group = block, nlpar = a)),
+      backend = "cmdstanr",
+      seed = 13, file = "output/Chapter13/b13.4"
+      )
+```
+
+収束のチェックをする。問題なさそう。  
+```{r, echo = FALSE, fig.heght = 8}
+post <- posterior_samples(b13.4, add_chain = TRUE)
+
+library(bayesplot)
+
+post %>% 
+  mcmc_trace(pars = vars(-iter, -lp__),
+             facet_args = list(ncol = 4), 
+             size = .15) +
+  theme(legend.position = "none")
+```
+
+```{r, echo = FALSE, fig.height = 4}
+levels <- 
+  c("sd_block__a_Intercept", "sd_actor__a_Intercept", 
+    "b_a_Intercept", 
+    str_c("r_block__a[", 6:1, ",Intercept]"), 
+    str_c("r_actor__a[", 7:1, ",Intercept]"), 
+    str_c("b_b_treatment", 4:1))
+
+text <-
+  tibble(x = posterior_summary(b13.4, probs = c(0.055, 0.955),)["r_actor__a[2,Intercept]", c(3, 1)],
+         y     = c(13.5, 16.5),
+         label = c("89% CI", "mean"),
+         hjust = c(.5, 0))
+
+arrow <-
+  tibble(x    = posterior_summary(b13.4, probs = c(0.055, 0.955),)["r_actor__a[2,Intercept]", c(3, 1)] + c(- 0.3, 0.2),
+         xend = posterior_summary(b13.4, probs = c(0.055, 0.955),)["r_actor__a[2,Intercept]", c(3, 1)],
+         y    = c(14, 16),
+         yend = c(14.8, 15.35))
+
+post %>% 
+  pivot_longer(-(iter:lp__)) %>% 
+  mutate(name = factor(name, levels = levels)) %>% 
+  ggplot(aes(x = value, y = name)) +
+  stat_pointinterval(point_interval = mean_qi,
+                     .width = .89, shape = 21, size = 1, point_size = 2, point_fill = "blue") +
+  geom_text(data = text,
+            aes(x = x, y = y, label = label, hjust = hjust)) +
+  geom_segment(data = arrow,
+               aes(x = x, xend = xend,
+                   y = y, yend = yend),
+               arrow = arrow(length = unit(0.15, "cm"))) +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.major.y = element_line(linetype = 3)) ->p3
+
+post %>% 
+  dplyr::select(starts_with("sd_")) %>% 
+  pivot_longer(everything()) %>% 
+  ggplot(aes(x=value))+
+  geom_density(aes(fill = name),alpha = 3/4, adjust = 2/3, color = "white")+
+  annotate(geom = "text", x = 0.67, y = 2, label = "block", color = "orange4") +
+  annotate(geom = "text", x = 2.725, y = 0.5, label = "actor", color = "orange1") +
+  scale_fill_manual(values = str_c("orange", c(1, 4))) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  ggtitle(expression(sigma["<group>"])) +
+  coord_cartesian(xlim = c(0, 4))+
+  theme(legend.position = "none") -> p4
+
+p3+p4  
+```
+
+結果は以下の通り（表\@ref(tab:res-b13-4)）。  
+
+```{r res-b13-4, echo = FALSE}
+posterior_summary(b13.4) %>% 
+  data.frame() %>% 
+  head(10) %>% 
+  round(2) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.4の結果。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+`block`の標準偏差は小さいため、これを除いても影響は小さいと考えられる。
+```{r}
+b13.5 <- 
+  brm(data = d2,
+      family = bernoulli,
+      bf(pulled_left ~ a + b,
+         a ~ 1 + (1|actor),
+         b ~ 0 + treatment,
+         nl = TRUE),
+      prior = c(prior(normal(0, 0.5), nlpar = b),
+                prior(normal(0, 1.5), class = b, 
+                      coef = Intercept, nlpar = a),
+                prior(exponential(1), class = sd, 
+                      group = actor, nlpar = a)),
+      backend = "cmdstanr",
+      seed = 13, file = "output/Chapter13/b13.5"
+      )
+```
+
+モデル比較をすると、b13.5の方宇賀PSISが小さい（表\@ref{tab:comp-b13-4}）。このことも、`block`間でそこまで大きなばらつきがないことを示している。
+```{r comp-b13-4}
+b13.4 <- add_criterion(b13.4, "loo")
+b13.5 <- add_criterion(b13.5, "loo")
+
+r <- loo_compare(b13.4, b13.5, criterion = "loo")
+
+print(r, simplify = F) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.4とb13.5の比較。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+### Even more clusters  
+`treatment`もランダム効果に入れることができる。
+```{r}
+b13.6 <- 
+  brm(data = d2, 
+      family = bernoulli,
+      pulled_left ~ 1 + (1 | actor) + (1 | block) + (1 | treatment),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(exponential(1), class = sd)),
+      iter = 2000, warmup = 1000, chains = 4, cores = 4,  
+      seed = 13,
+      backend = "cmdstanr",
+      file = "output/Chapter13/b13.6")
+```
+
+固定効果と変量効果に入れた場合で、`treatment`の推定値は大きく変わらない（表\@ref(tab:b13-4vsb13-6)）。これは、各条件で十分にデータ数があるためである。b13.6で少しだけ縮合が起きている。  
+
+```{r b13-4vsb13-6, echo = FALSE}
+b13.4 %>% 
+  fixef() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par, "treatment")) -> b1
+
+b13.6 %>% 
+  posterior_summary() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par2") %>% 
+  filter(str_detect(par2, "r_treatment")) -> b2
+  
+bind_cols(b1,b2) %>% 
+  dplyr::select(-par2) %>% 
+  set_names(c("par","Est_fixed","se_fixed","Q2.5_fixed",
+              "Q97.5_fixed","Est_random","se_random",
+              "Q2.5_random","Q97.5_random")) %>% 
+  kable(booktabs = TRUE, 
+        caption = "b13.4とb14.6のtreatmentの値") %>% 
+  add_header_above(c("", "b13.4"=4, "b13.6"=4)) %>% 
+  kable_styling(latex_options = c("striped","hold_position",
+                                  "repeat_header","scale_down"))
+```
+
+## Divergent transitions and non-centered priors  
+事後分布の傾きに急な部分があるとき、`divergent transition`が生じることがある。これは、階層モデルを扱うときによく生じる。これに対処する方法は大きく分けて2つある。  
+
+1. warmup期間でうまく調節が行われるようにする（i.e., `adapt_delta`の値を上げる）。  
+2. 最パラメータ化を行う。  
+
+### The Devil's Funnel  
+以下のモデルを考える。  
+
+$$
+\begin{aligned}  
+  v &\sim Normal(0,3)\\
+  x &\sim Normal(0, exp(v))\\
+\end{aligned}
+$$
+
+モデルを回してみると、非常に多くのdivergent transitionが生じる。
+```{r, warning = TRUE}
+#m13.7 <- 
+ # ulam(
+  #  data = list(N = 1),
+   # alist(
+    #  v ~ normal(0, 3),
+     # x ~ normal(0, exp(v))
+    #), 
+    #chains = 4 
+  #)
+
+m13.7 <- readRDS("output/Chapter13/m13.7.rds")
+
+precis(m13.7)
+```
+
+xの分布は以下のようになる。かなり急であることが分かる。   
+```{r, echo = FALSE}
+set.seed(13)
+
+tibble(v = rnorm(1e3, mean =0, sd=3),
+       x = rnorm(1e3,mean=0, sd = exp(v))) %>% 
+  ggplot(aes(x=x))+
+  geom_histogram(binwidth=1)+
+  annotate(geom = "text",
+           x = -100, y = 490, hjust = 0,
+           label = expression(italic(v)%~%Normal(0, 3))) +
+  annotate(geom = "text",
+           x = -100, y = 440, hjust = 0,
+           label = expression(italic(x)%~%Normal(0, exp(italic(v))))) +
+  coord_cartesian(xlim = c(-20, 20)) +
+  scale_y_continuous(breaks = NULL)+
+  theme(aspect.ratio=1) 
+```
+
+traceplotもうまく収束していないことを示している。
+```{r, echo = FALSE, fig.align='center'}
+#traceplot(m13.7)
+```
+
+この例はNealの漏斗と呼ばれる。対数事後確率$p(v,x) = p(x|v)*p(v)$を計算し、その上にMCMCサンプルも図示する。対数事後確率の高いところからうまくサンプリングできていないことが分かる。これは、zが小さいところではxの事後分布が0付近でかなり急になっているからである。    
+```{r, echo = FALSE}
+post <- extract.samples(m13.7) %>% 
+        data.frame()
+
+p <- seq(-4,4,length.out = 200) 
+
+crossing(v=p,x=p) %>% 
+  mutate(likelihood_v = log(dnorm(v,0,3)),
+         likelihood_x = log(dnorm(x,0,exp(v)))) %>% 
+  mutate(joint_lkl = likelihood_v + likelihood_x) %>% 
+  ggplot(aes(x = x, y=v))+
+  geom_raster(aes(fill = joint_lkl), interpolate=TRUE)+
+  scale_fill_viridis_c(option="B")+
+  geom_point(data = post, color = "black", alpha = 1/5, size=0.7)+
+  coord_cartesian(ylim = c(-4,4),xlim = c(-4,4))+
+  theme(aspect.ratio=1)
+```
+
+これを解決するために、non-centered parametarazationという最パラメータ化を行う。この方法は、あるパラメータの分布が別のパラメータに強く依存しないようにすることである。non-centered parametarazationでは、標準化と逆のことを行っている。すなわち、下の式では$z$が$x$を標準化したものになるようにしている。    
+$$
+\begin{aligned}  
+  v &\sim Normal(0,3)\\
+  z &\sim Normal(0,1)\\
+  x &= z\:exp(v)
+\end{aligned}
+$$
+<br />  
+
+最パラメータ後はvとzについて事後分布を得ることになるが、このとき対数事後分布に傾きが急な場所ができないため、うまくサンプリングができる。  
+
+```{r}
+#m13.7nc <- ulam(
+  #alist(
+    #v ~ normal(0,3),
+    #z ~ normal(0,1),
+    #gq> real[1]:x<<- z*exp(v)
+  #),
+  #data = list(N=1), chains=4
+#)
+
+m13.7nc <- readRDS(file="output/Chapter13/m13.7nc")
+
+precis(m13.7nc)
+```
+
+
+```{r, echo = FALSE}
+post_nc <- extract.samples(m13.7nc) %>% 
+            data.frame()
+
+crossing(v=p,z=p/2) %>% 
+  mutate(likelihood_v = log(dnorm(v,0,3)),
+         likelihood_z = log(dnorm(z,0,1))) %>% 
+  mutate(joint_lkl = likelihood_v + likelihood_z) %>% 
+  ggplot(aes(x = z, y=v))+
+  geom_raster(aes(fill = joint_lkl), interpolate=TRUE)+
+  scale_fill_viridis_c(option="B")+
+  geom_point(data = post_nc, color = "black", alpha = 1/5, size=0.7)+
+  coord_cartesian(ylim = c(-4,4),xlim = c(-2,2))+
+  theme(aspect.ratio=1)
+```
+
+### Non-centered chimpanzees  
+もともとnon-centered parametarazationを行っていたモデルの有効サンプルサイズに問題はなさそう。
+```{r, echo = FALSE}
+library(posterior)
+
+posterior_samples(b13.4) %>% 
+  summarise_draws() %>% 
+  ggplot(aes(x=ess_bulk, y = ess_tail))+
+  geom_point(color = "navy")+
+  geom_abline(linetype=2)+
+  theme_classic()+
+  theme(aspect.ratio=1)+
+  xlim(0, 5000) +
+  ylim(0, 5000) +
+  ggtitle("Effective sample size summaries for b13.4",
+          subtitle = "ess_bulk is on the x and ess_tail is on the y") +
+  theme(plot.subtitle = element_text(size = 10),
+        plot.title = element_text(size = 11.5),
+        plot.title.position = "plot")
+```
+
+ところで、常に再パラメータ化を行った方がいいということではない。クラスター内でのばらつきが小さい場合や、クラスター内で各ユニットのデータ数が少ない場合には再パラメータ化が有効である。  
+
+## Multilevel posterior predictions  
+### Posterior prediction for same clusters  
+
+`chimp`の個体2の事後予測を描写する。  
+```{r}
+nd <- d2 %>% 
+      distinct(treatment) %>% 
+      mutate(actor=2, block=1)
+
+labels <- c("R/N", "L/N", "R/P", "L,P")
+
+fit13.4 <- fitted(b13.4, newdata = nd) %>% 
+           data.frame() %>% 
+           bind_cols(nd) %>% 
+           mutate(treatment = factor(treatment, labels = labels))
+```
+
+個体2の推定値は以下の通り（表\@ref(tab:b13-4-actor2)）。
+```{r b13-4-actor2}
+fit13.4 %>% 
+  kable(booktabs = TRUE, 
+        caption = "個体2の推定値") %>% 
+  kable_styling(latex_options = c("striped","hold_position"))
+  
+```
+
+描写すると以下のようになる。  
+```{r, echo=FALSE}
+chimp2 <- d2 %>% 
+  filter(actor == "2") %>% 
+  group_by(treatment) %>% 
+  summarise(prob = mean(pulled_left)) %>% 
+  ungroup() %>% 
+  mutate(treatment = factor(treatment, labels = labels))
+
+fit13.4 %>% 
+  ggplot(aes(x=treatment, group=1))+
+  geom_ribbon(aes(y = Estimate, ymin = Q2.5, 
+             ymax = Q97.5),fill = "orange1")+
+  geom_line(aes(y=Estimate), color = "navy")+
+  geom_point(data=chimp2,
+             aes(y=prob), color = "grey25")+
+  ggtitle("Chimp #2",
+          subtitle = "The posterior mean and 95%\nintervals are the blue line\nand orange band, respectively.\nThe empirical means are\nthe charcoal dots.") +
+  coord_cartesian(ylim = c(.75, 1)) +
+  theme(plot.subtitle = element_text(size = 10), 
+        aspect.ratio=0.8)
+```
+
+続いて個体5について、`fitted()`を用いずに事後分布を描く。
+```{r}
+post <- posterior_samples(b13.4)
+
+post %>% 
+  transmute(actor_5 = `r_actor__a[5,Intercept]`) %>% 
+  ggplot(aes(x=actor_5))+
+  geom_density(size=0, fill="orange1", color = "transparent")+
+  theme(aspect.ratio=0.8)+
+  ggtitle("Chimp #5's density")
+```
+
+個体5の推定値は以下の通り（表\@ref(tab:b13-4-actor5)）。
+```{r}
+post %>% 
+  pivot_longer(b_b_treatment1:b_b_treatment4) %>% 
+  mutate(fitted = inv_logit_scaled(b_a_Intercept + value + `r_actor__a[1,Intercept]` + `r_block__a[1,Intercept]`)) %>% 
+  mutate(treatment = factor(str_remove(name, "b_b_treatment"),
+                            labels = labels)) %>% 
+  dplyr::select(name:treatment) %>% 
+  group_by(treatment) %>% 
+  mean_qi(fitted) -> fit13.4_act5
+```
+
+```{r b13-4-actor5, echo=FALSE}
+fit13.4_act5 %>% 
+  kable(booktabs = TRUE, 
+        digits=2,
+        caption = "個体5の推定値") %>% 
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+図示すると以下の通り。
+```{r, echo=FALSE, fig.align='center'}
+chimp5 <- d2 %>% 
+  filter(actor == "5") %>% 
+  group_by(treatment) %>% 
+  summarise(prob = mean(pulled_left)) %>% 
+  ungroup() %>% 
+  mutate(treatment = factor(treatment, labels = labels))
+
+fit13.4_act5 %>% 
+  ggplot(aes(x=treatment, group=1))+
+  geom_ribbon(aes(y=fitted, ymin =.lower, ymax=.upper),
+              color = "transparent", fill = "orange1")+
+  geom_line(aes(y=fitted), color = "navy")+
+  geom_point(data=chimp5,
+             aes(y=prob), color = "grey25")+
+  ggtitle("Chimp #5",
+          subtitle = "This plot is like the last except\nwe did more by hand.") +
+  coord_cartesian(ylim = c(0,1)) +
+  theme(plot.subtitle = element_text(size = 10), 
+        aspect.ratio=0.8)
+```
+
+### Posterior prediction for new clusters  
+現在の推定結果から新たなclusterについて予測をしたい。まず、平均的な個体（つまり、ランダム効果を0にしたとき）の推定値と80%信用区間は以下の通り（表\@ref(tab:b13-4-qi-new)）。
+
+```{r }
+fit13.4_new_ave <-
+  post %>% 
+  pivot_longer(b_b_treatment1:b_b_treatment4) %>% 
+  mutate(fitted = inv_logit_scaled(b_a_Intercept + value)) %>% 
+  mutate(treatment = factor(str_remove(name, "b_b_treatment"),
+                            labels = labels)) %>% 
+  dplyr::select(name:treatment) %>%
+  group_by(treatment) %>%
+  mean_qi(fitted, .width = .8)
+```
+
+```{r b13-4-qi-new}
+fit13.4_new_ave　%>% 
+  kable(booktabs = TRUE, 
+        digits=2,
+        caption = "平均的な個体") %>% 
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+```{r, echo=FALSE}
+p5 <- 
+  fit13.4_new_ave %>% 
+  ggplot(aes(x = treatment, y = fitted, group = 1)) +
+  geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = "orange1") +
+  geom_line(color = "blue") +
+  ggtitle("Average actor") +
+  coord_cartesian(ylim = 0:1) +
+  theme(plot.title = element_text(size = 14, hjust = .5),
+        aspect.ratio=0.8)
+
+p5
+```
+
+続いて、シミュレーションを行ってランダム効果を考慮に入れた（個体間のばらつきを考慮に入れた）推定値と80%信用区間を図示すると、以下のようになる（表\@ref(tab:res-b13.4-qi-sim)）。
+```{r}
+fit13.4_new_sim <-
+  post %>% 
+  mutate(a_sim = rnorm(n(),mean=b_a_Intercept, sd = sd_actor__a_Intercept)) %>% 
+  pivot_longer(b_b_treatment1:b_b_treatment4) %>% 
+  mutate(fitted = inv_logit_scaled(a_sim + value)) %>% 
+  mutate(treatment = factor(str_remove(name, "b_b_treatment"),
+                            labels = labels)) %>% 
+  dplyr::select(name:treatment) %>%
+  group_by(treatment) %>%
+  mean_qi(fitted, .width = .8)
+```
+
+```{r res-b13.4-qi-sim, echo=FALSE}
+fit13.4_new_sim　%>% 
+  kable(booktabs = TRUE, 
+        digits=2,
+        caption = "ランダム効果を考慮した個体") %>% 
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+```{r, echo = FALSE}
+p6 <- 
+  fit13.4_new_sim %>% 
+  ggplot(aes(x = treatment, y = fitted, group = 1)) +
+  geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = "orange1") +
+  geom_line(color = "blue") +
+  ggtitle("Marginal of actor") +
+  coord_cartesian(ylim = 0:1) +
+  theme(plot.title = element_text(size = 14, hjust = .5),
+        aspect.ratio=0.8)
+
+p6
+```
+
+最後に、新たに100個体についてデータを取得した際の推定値をシミュレートする。  
+```{r}
+nd <- distinct(d2, treatment) %>% 
+      tidyr::expand(actor = str_c("new",1:100),
+             treatment) %>% 
+      mutate(row = 1:n())
+
+set.seed(13)
+
+fit13.4_new_100 <- 
+  fitted(b13.4,
+         newdata=nd,
+         allow_new_levels =TRUE,
+         sample_new_levels = "gaussian",
+         summary =F,
+         nsamples=100) %>% 
+  data.frame()
+```
+
+```{r}
+p7 <- fit13.4_new_100 %>% 
+  set_names(pull(nd,row)) %>% 
+  mutate(iter = 1:n()) %>% 
+  pivot_longer(-iter,names_to="row") %>% 
+  mutate(row=as.double(row)) %>% 
+  left_join(nd, by="row") %>% 
+  mutate(actor_n = str_remove(actor, "new") %>% as.double()) %>% 
+  filter(actor_n == iter) %>% 
+  mutate(treatment = factor(treatment, labels = labels)) %>% 
+  ggplot(aes(x = treatment, y = value, group = actor)) +
+  geom_line(alpha = 1/2, color = "navy") +
+  ggtitle("100 simulated actors") +
+  theme(plot.title = element_text(size = 14, hjust = .5),
+        aspect.ratio = 0.8)
+
+p5|p6|p7
+```
+
+## Post stratification  
+新たなクラスターに関する予測をする他の方法としては、post stratificationがある。例えば、それぞれのカテゴリー$i$について推定値$p_{i}$が推定されたとき、それぞれのカテゴリーのデータ数に基づいて算出した以下の式を用いる。  
+
+$$
+\frac{\sum_{i} N_{i}p_{i}}{\sum_{i} N_{i}}
+$$
+
+### Meet the data  
+以下では、Monica Alexanderの[ブログ](https://www.monicaalexander.com/posts/2019-08-07-mrp/)の例を用いる。  
+
+```{r}
+load("data/mrp_data_ch13.rds")
+
+d %>% 
+  head(10) %>% 
+  kable(booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+データ`d`は、女性が結婚後に姓を変更したかについてのデータ。変数の説明は以下の通り。  
+- `kept_name` 回答、1 = "yes", 0 = "no"。  
+- `age_group` 25歳から75歳まで、25 = [25,30), 30 = [30,40)...。  
+- `decade_married` 1979年から2019年まで、1979 = [1979,1989), 1989 =[1989,1999), ...。  
+- `educ_group` <BA = no bachelor's degree, BA = bachelor's degree, >BA = above bachelor's degree。  
+- `state_name` 州の名前。 
+
+データ`cell_counts`はUS censusによるデータで、`n`は各カテゴリーに該当する人数を表している。一部のカテゴリーについては十分なサンプル数があるが、それ以外についてはサンプル数が小さいものもあり、ばらつきが大きい。よって、新たなかてごりーについて予測を行う場合には、 個のばらつきを考慮する必要がある。 
+```{r}
+cell_counts %>% 
+  ggplot(aes(x = n)) +
+  geom_histogram(binwidth = 2000, fill = "blue") +
+  scale_x_continuous(breaks = 0:3 * 100000, labels = c(0, "100K", "200K", "300K"))+
+  theme(aspect.ratio=1)
+```
+
+### Settle the MR part of MRP.  
+まずは、データを用いてモデリングを行う。全体の平均の事前分布としては、$Normal(-1,1)$を用いる。これは、結婚後には姓を変えると答える人の方が多いと考えられるため。    
+
+```{r}
+tibble(n = rnorm(1e6, -1, 1)) %>% 
+  mutate(p = inv_logit_scaled(n)) %>% 
+  ggplot(aes(x = p)) +
+  geom_histogram(fill = "blue", binwidth = .02) +
+  scale_y_continuous(breaks = NULL)+
+  theme(aspect.ratio=0.7)
+```
+
+それでは、モデリングを行う。
+```{r}
+b13.7 <- 
+  brm(data =d,
+      family = bernoulli,
+      formula = kept_name ~ 1 + (1|age_group) + 
+        (1|decade_married) + (1|educ_group) + (1|state_name),
+      prior = c(prior(normal(-1, 1), class = Intercept),
+                prior(exponential(1), class = sd)),
+      seed = 13, control = list(adapt_delta =.98),
+      backend = "cmdstanr",
+      file = "output/Chapter13/b13.7")
+```
+
+結果は以下の通り（表\@ref{tab:res-b13-7}）
+```{r res-b13-7, echo = FALSE}
+posterior_summary(b13.7) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par, "sd|b_")) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "b13.7の結果") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+推定値の90%信用区間は以下の通り。  
+```{r, echo = FALSE, fig.align='center'}
+posterior_samples(b13.7) %>% 
+  dplyr::select(starts_with("sd_")) %>% 
+  set_names(str_c("sigma[", c("age", "decade~married", "education", "state"), "]")) %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>%
+  median_qi(.width = seq(from = .5, to = .9, by = .1)) %>%
+  ggplot(aes(x = value, xmin = .lower, xmax = .upper, y = reorder(name, value))) +
+  geom_interval(aes(alpha = .width), color = "orange3") +
+  scale_alpha_continuous(".width", range = c(.7, .15)) +
+  scale_y_discrete(labels = ggplot2:::parse_safe) +
+  xlim(0, NA) +
+  geom_vline(xintercept = c(0,0.5,1,1.5), linetype="dotted",
+             color = "grey3")+
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.grid.major.y = element_blank(),
+        aspect.ratio=.5,
+        legend.position = "none")+
+  ylab("")+
+  xlab("")
+```
+
+###  Post-stratify to put the P in MRP.  
+ここでは、`age_group`と`state`のみに焦点を当てる。以下では、3つの推定方法による結果を比較する。  
+
+#### Estimate by age group  
+まずは、生データの姓を変更した女性の割合を年齢層ごとに図示する。
+```{r, echo=FALSE, fig.align='center'}
+levels <- c("raw data", "multilevel", "MRP")
+
+p1 <- 
+  d %>% 
+  group_by(age_group, kept_name) %>% 
+  summarise(n = n()) %>% 
+  group_by(age_group) %>% 
+  mutate(prop = n/sum(n),
+         type = factor("raw data", levels = levels)) %>% 
+  filter(kept_name ==1, between(age_group, 20,80)) %>% 
+  ggplot(aes(x=prop, y = age_group))+
+  geom_point()+
+  scale_x_continuous(breaks = c(0.0,.5,1.0))+
+  coord_cartesian(xlim = c(0,1))+
+  theme(aspect.ratio=1)+
+  xlab("")+
+  ylab("")+
+  facet_wrap(~type)+
+  theme(strip.background = element_blank())+
+  geom_vline(xintercept = seq(0,1,by=0.2),
+             linetype = "dotted", color = "grey")
+
+p1
+```
+
+続いて、階層モデルの推定結果を図示する。  
+```{r, echo=FALSE}
+nd <- distinct(d, age_group) %>% 
+      arrange(age_group)
+
+fitted(b13.7, newdata = nd,
+       re_formula = ~ (1|age_group)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  mutate(type = "multilevel") %>% 
+  ggplot(aes(x=Estimate, y = age_group))+
+  geom_pointinterval(aes(xmin = Q2.5, xmax = Q97.5),
+                     color = "navy", point_size=2)+
+  scale_x_continuous(breaks = c(0.0,.5,1.0))+
+  coord_cartesian(xlim = c(0,1))+
+  theme(aspect.ratio=1)+
+  xlab("")+
+  ylab("")+
+  facet_wrap(~type)+
+  theme(strip.background = element_blank())+
+  geom_vline(xintercept = seq(0,1,by=0.2),
+             linetype = "dotted", color = "grey")-> p2
+
+p2
+```
+
+最後に、post-stratificationによる推定結果を図示する。  
+まずは、`cell_counts`データの各年齢カテゴリーの全体に占める割合を算出し、モデルの結果をもとにそれぞれのカテゴリーにおける事後予測分布を算出する。  
+```{r, cache.lazy = FALSE}
+age_prop <-  
+  cell_counts %>% 
+  group_by(age_group) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ungroup()
+
+p <- add_predicted_draws(b13.7,
+                    newdata = age_prop %>% 
+                      filter(between(age_group,20,80),
+                             decade_married >1969),
+                    allow_new_levels = TRUE)
+```
+
+この結果を用い、以下の数式に基づき各カテゴリのデータ数に応じて重みづけを行う。  
+$$
+\frac{\sum_{i} N_{i}p_{i}}{\sum_{i} N_{i}}
+$$
+
+```{r}
+p <- 
+  p %>% 
+  group_by(age_group, .draw) %>% 
+  summarise(kept_name_predict = sum(.prediction*prop)) %>% 
+  group_by(age_group) %>% 
+  mean_qi(kept_name_predict)
+```
+
+全ての結果を図示すると以下の通り。
+```{r, echo=FALSE}
+
+p %>% 
+  mutate(type = "MRP") %>% 
+  ggplot(aes(x=kept_name_predict, y = age_group))+
+  geom_pointinterval(aes(xmin = .lower, xmax = .upper),
+                     color = "orange1", point_size=2.5,
+                     interval_size =1)+
+  scale_x_continuous(breaks = c(0.0,.5,1.0))+
+  coord_cartesian(xlim = c(0,1))+
+  theme(aspect.ratio=1)+
+  xlab("")+
+  ylab("")+
+  facet_wrap(~type)+
+  theme(strip.background = element_blank())+
+  geom_vline(xintercept = seq(0,1,by=0.2),
+             linetype = "dotted", color = "grey") ->p3
+
+(p1+p2+p3)+
+  plot_annotation(title = "Proportion of women keeping name after marriage, by age",
+                  subtitle = "Proportions are on the x-axis and age groups are on the y-axis.")
+```
+
+#### Estimate by US state.  
+続いて、州ごとの予測結果を図示する。
+```{r, echo=FALSE}
+load("data/mrp_data_ch13.rds")
+library(statebins)
+
+d %>% 
+  group_by(state_name, kept_name) %>% 
+  summarise(n=n()) %>% 
+  group_by(state_name) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  filter(kept_name ==1,
+         state_name!="puerto rico") %>% 
+  mutate(type = factor("raw data", levels = levels),
+         statename = str_to_title(state_name)) %>% 
+  ggplot(aes(fill = prop, state = statename))+
+  geom_statebins(lbl_size = 2.5, border_size = 1/4, 
+                 radius = grid::unit(2, "pt"))+
+  scale_fill_viridis_c("proportion\nkeeping\nname", option = "B", limits = c(0, 0.8)) +
+  scale_x_continuous(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  theme(legend.position = "none") +
+  facet_wrap(~ type)+
+  theme_void()+
+  theme(aspect.ratio=1,
+        strip.background = element_blank(),
+        legend.position = "none") -> p4
+
+p4  
+```
+
+続いて、階層レベルモデルの結果を図示する。  
+```{r, echo=FALSE}
+nd <- distinct(d, state_name)
+
+fitted(b13.7,
+       newdata = nd,
+       re_formula = ~(1|state_name)) %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  filter(state_name != "puerto rico") %>% 
+  mutate(prop = Estimate,
+         type = factor("multilevel", levels = levels),
+         statename = str_to_title(state_name)) %>% 
+  ggplot(aes(fill=prop, state=statename))+
+  geom_statebins(lbl_size = 2.5, border_size = 1/4, radius = grid::unit(2, "pt")) +
+  scale_fill_viridis_c("proportion\nkeeping\nname", option = "B", limits = c(0, 0.8)) +
+  scale_x_continuous(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  facet_wrap(~ type)+
+  theme_void()+
+  theme(aspect.ratio=1,
+        strip.background = element_blank(),
+        legend.position = "bottom",
+        legend.direction = "horizontal") -> p5
+
+p5
+```
+
+最後に、post-stratificationによる推定結果を図示する。  
+```{r}
+state_prop <- 
+  cell_counts %>% 
+  group_by(state_name) %>% 
+  mutate(prop=n/sum(n))
+
+add_predicted_draws(b13.7,
+                    newdata = state_prop %>% 
+                      filter(between(age_group,20,80),
+                             decade_married > 1969),
+                    allow_new_levels = TRUE) %>%
+  group_by(state_name, .draw) %>% 
+  summarise(kept_name_predict = sum(.prediction*prop)) %>% 
+  group_by(state_name) %>% 
+  mean_qi(kept_name_predict) -> pp
+  
+```
+
+全部を図示すると以下の通り。  
+$\sigma_{state}$の推定値は小さかったので、縮合によってモデルによる推定値のばらつきが小さくなっていることが分かる。
+```{r, echo = FALSE}
+pp %>% 
+  filter(state_name!="puerto rico") %>% 
+  mutate(type = factor("MRP", levels = levels),
+         statename = str_to_title(state_name)) %>% 
+  ggplot(aes(fill = kept_name_predict, state = statename))+
+  geom_statebins(lbl_size = 2.5, border_size = 1/4, 
+                 radius = grid::unit(2, "pt"))+
+  scale_fill_viridis_c("proportion\nkeeping\nname", option = "B", limits = c(0, 0.8)) +
+  scale_x_continuous(breaks = NULL) +
+  scale_y_continuous(breaks = NULL) +
+  theme(legend.position = "none") +
+  facet_wrap(~ type)+
+  theme_void()+
+  theme(aspect.ratio=1,
+        strip.background = element_blank(),
+        legend.position = "none") ->p6
+
+(p4 | p5 | p6) +
+  plot_annotation(title = "Proportion off women keeping name after marriage, by state",
+                  theme = theme(plot.margin = margin(0.2, 0, 0.01, 0, "cm")))
+```
+
+## Practice  
+### 13M1  
+> Revisit the Reed frog survival data, `data(reedfrogs)`, and add the predation and size treatment variables to the varying intercepts model. Consider models with either main effect alone, both main effects, as well as a model including both and their interaction. Instead of focusing on inferences about these two predictor variables, focus on the inferred variation across tanks. Explain why it changes as it does across models.  
+
+`reedfrogs`データで、`pred`（捕食者がいたか）と`size`（オタマジャクシの大きさ(big or small)）も説明変数に加える。どちらか一方を加えたモデル、両方を加えたモデル、交互作用も含めたモデルの計4つのモデルを比較する。    
+```{r}
+data(reedfrogs)
+
+d <- reedfrogs
+head(d)
+
+d %>% 
+  mutate(tank = 1:nrow(d)) ->d
+
+head(d)
+
+d %>% 
+  mutate(pred = ifelse(pred == "pred",1,0),
+         size = ifelse(size == "big", 1,0)) ->dd
+
+b13M1a <- 
+  brm(data =dd,
+      family = binomial,
+      formula = bf(surv|trials(density) ~ a + b,
+                   a ~ 1 + (1|tank),
+                   b ~ 0 + pred,
+                   nl = TRUE),
+      prior = c(prior(normal(0,1.5), class = b, 
+                      coef = Intercept, nlpar =a),
+                prior(normal(0,1.5), class = b, nlpar =b),
+                prior(exponential(1), class = sd, nlpar =a)),
+      backend = "cmdstanr",
+      seed = 15, file = "output/Chapter13/b13M1a"
+      )
+
+b13M1b <- 
+  brm(data =dd,
+      family = binomial,
+      formula = bf(surv|trials(density) ~ a + b,
+                   a ~ 1 + (1|tank),
+                   b ~ 0 + size,
+                   nl = TRUE),
+      prior = c(prior(normal(0,1.5), class = b, 
+                      coef = Intercept, nlpar =a),
+                prior(normal(0,1.5), class = b, nlpar =b),
+                prior(exponential(1), class = sd, nlpar =a)),
+      backend = "cmdstanr",
+      seed = 15, file = "output/Chapter13/b13M1b"
+      )
+
+b13M1c <- 
+  brm(data =dd,
+      family = binomial,
+      formula = bf(surv|trials(density) ~ a + b,
+                   a ~ 1 + (1|tank),
+                   b ~ 0 + pred + size,
+                   nl = TRUE),
+      prior = c(prior(normal(0,1.5), class = b, 
+                      coef = Intercept, nlpar =a),
+                prior(normal(0,1.5), class = b, nlpar =b),
+                prior(exponential(1), class = sd, nlpar =a)),
+      backend = "cmdstanr",
+      seed = 15, file = "output/Chapter13/b13M1c"
+      )
+
+b13M1d <- 
+  brm(data =dd,
+      family = binomial,
+      formula = bf(surv|trials(density) ~ a + b,
+                   a ~ 1 + (1|tank),
+                   b ~ 0 + pred*size,
+                   nl = TRUE),
+      prior = c(prior(normal(0,1.5), class = b, 
+                      coef = Intercept, nlpar =a),
+                prior(normal(0,1.5), class = b, nlpar =b),
+                prior(exponential(1), class = sd, nlpar =a)),
+      backend = "cmdstanr",
+      seed = 15, file = "output/Chapter13/b13M1d"
+      )
+```
+
+```{r}
+posterior_summary(b13M1a) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par, "b_|sd_")) %>% 
+  set_names(c("par","Est_a","SE_a","Q2.5_a","Q97.5_a"))-> res_13M1a 
+
+posterior_summary(b13M1b) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par, "b_|sd_")) %>% 
+  set_names(c("par","Est_b","SE_b","Q2.5_b","Q97.5_b"))-> res_13M1b
+
+posterior_summary(b13M1c) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par, "b_|sd_"))%>% 
+  set_names(c("par","Est_c","SE_c","Q2.5_c","Q97.5_c")) -> res_13M1c
+
+posterior_summary(b13M1d) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par, "b_|sd_"))%>% 
+  set_names(c("par","Est_d","SE_d","Q2.5_d","Q97.5_d")) -> res_13M1d
+
+res_13M1a %>% 
+full_join(res_13M1b,by="par") %>% 
+  full_join(res_13M1c) %>% 
+  full_join(res_13M1d) %>% 
+  mutate(across(where(is.numeric),~round(.x,2)))-> res_13M1
+
+res_13M1[is.na(res_13M1)] <- "-"
+```
+
+結果は以下の通り（表\@ref(tab:res-b13M1)）。ランダム効果の標準偏差の推定値は、`pred`が入っているモデルではほとんど変わらないが、`size`だけのモデルでは大きくなっている。これは、`pred`がタンクごとの違いの大部分を説明しているからだと考えられる。  
+```{r res-b13M1, echo = FALSE}
+res_13M1 %>% 
+  kable(booktabs = TRUE, 
+        caption = "モデルの比較",
+        digits =2,
+        col.names = c("par", rep(c("Estimate","SE","Q2.5","Q97.5"),4)),
+          align = "c") %>% 
+  add_header_above(c("", "pred only"=4, "size only"=4, "pred and size"=4, "including interaction"=4)) %>% 
+  kable_styling(latex_options = c("striped","hold_position",
+                                  "repeat_header","scale_down"))
+```
+
+### 13M2  
+> Compare the models you fit just above, using WAIC. Can you reconcile the differences in WAIC with the posterior distributions of the models?  
+
+WAICを比較する（表\@ref{tab:comp-waic}）。ほとんど変わらないが、やはりpredのみのモデルが最も予測がよい。
+```{r}
+b13M1a <- add_criterion(b13M1a, "waic")
+b13M1b <- add_criterion(b13M1b, "waic")
+b13M1c <- add_criterion(b13M1c, "waic")
+b13M1d <- add_criterion(b13M1d, "waic")
+```
+
+
+```{r comp-waic}
+loo_compare(b13M1a,b13M1b,b13M1c,b13M1d, criterion="waic") %>% 
+  print(simplify = F) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "WAICの比較。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+### 13M3  
+> Re-estimate the basic Reed frog varying intercept model, but now using a Cauchy distribution in place of the Gaussian distribution for the varying intercepts. That is, fit this model:  
+
+$$
+\begin{aligned}
+
+s_i &\sim Binomial(n_i,p_i)\\
+logit(p_i) &= \alpha_{tank}\\
+\alpha_{tank} &\sim Cauchy(\alpha,\sigma)\\
+\alpha &\sim Normal(0,1)\\
+\sigma &\sim Exponential(1)
+
+\end{aligned}
+$$
+
+> Compare the posterior means of the intercepts, 
+, to the posterior means produced in the chapter, using the customary Gaussian prior. Can you explain the pattern of differences?
+
+ランダム効果の標準偏差にコーシー分布を用いてモデリングを行う。
+`brms`だと実装できないので、`ulam`関数でモデリングする。  
+```{r}
+#b13M3 <- 
+ # m_TankCauchy <- ulam(
+  #alist(
+   # surv ~ dbinom(density, p),
+    #logit(p) <- a[tank],
+    #a[tank] ~ dcauchy(a_bar, sigma),
+    #a_bar ~ dnorm(0, 1.5),
+    #sigma ~ dexp(1)
+  #),
+  #data = d, chains = 4, cores = 4, log_lik = TRUE,
+  #iter = 2e3, control = list(adapt_delta = 0.99)
+#)
+
+
+b13M3 <- readRDS("output/Chapter13/b13M3.rds")
+```
+
+各tankのランダム切片の推定値を示すと以下のようになる(表\@ref(fig:fig-13M3))。白抜きの点は実測値、オレンジの点はコーシー分布を事前分布としたときの推定値、青い点は正規分布を事前分布としたときの推定値を示す。また、点線は実測値の平均値である。  
+
+正規分布のほうがコーシー分布よりも点線に近い推定値をとっており、縮合がより強く生じていることがわかる。これは、コーシー分布のほうが正規分布よりも裾の広い分布だからである。  
+```{r fig-13M3, fig.cap = "練習問題13M3の図。ランダム効果の事前分布に正規分布とコーシー分布を使用したときの違い"}
+posterior_summary(b13.2) %>% 
+  data.frame() %>% 
+  mutate(across(everything(), logistic)) %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par,"r_t")) %>% 
+  mutate(tank = 1:n(),
+         type = "normal") %>% 
+  dplyr::select(-Est.Error, -par) -> post_b13.2
+
+extract.samples(b13M3) %>% 
+  data.frame() %>% 
+  mutate(across(everything(), logistic)) %>% 
+  dplyr::select(-a_bar, -sigma) -> a
+
+data.frame(tank = 1:48) %>%   
+  mutate(Estimate = map_dbl(a,mean)) %>% 
+  mutate(Q2.5 = map_dbl(a, ~quantile(., probs = 0.025))) %>% 
+  mutate(Q97.5 = map_dbl(a, ~quantile(., probs = 0.975))) %>% 
+  mutate(type = "cauchy")-> post_b13M3
+
+bind_rows(post_b13.2, post_b13M3) -> post
+  
+post %>% 
+  ggplot(aes(x=tank, y=Estimate))+
+  geom_point(aes(color = type),
+            position = "dodge")+
+  geom_point(data = d,
+             aes(y = propsurv),
+             shape = 1)+
+  geom_hline(data = d,
+             yintercept = mean(d$propsurv),
+             linetype = "dashed")+
+  theme(aspect.ratio = 1)+
+  scale_color_manual(values = c("orange","blue3"))
+```
+
+### 13M4  
+> 今度はstudentのt分布を事前分布として用いて先ほどの結果と比較せよ。  
+
+```{r}
+#b13M4 <- 
+ # m_TankCauchy <- ulam(
+  #alist(
+   # surv ~ dbinom(density, p),
+  #  logit(p) <- a[tank],
+   # a[tank] ~ dstudent(2, a_bar, sigma),
+  #  a_bar ~ dnorm(0, 1.5),
+   # sigma ~ dexp(1)
+  #),
+  #data = d, chains = 4, cores = 4, log_lik = TRUE,
+  #iter = 2e3, control = list(adapt_delta = 0.99)
+#)
+
+
+b13M4 <- readRDS("output/Chapter13/b13M4.rds")
+```
+
+各tankのランダム切片の推定値を示すと以下のようになる(表\@ref(fig:fig-13M3))。白抜きの点は実測値、オレンジの点はコーシー分布を事前分布としたときの推定値、青い点はt分布を事前分布としたときの推定値を示す。また、点線は実測値の平均値である。  
+
+結果、ほとんど同じ推定値をとることがわかる。  
+```{r}
+extract.samples(b13M4) %>% 
+  data.frame() %>% 
+  mutate(across(everything(), logistic)) %>% 
+  dplyr::select(-a_bar, -sigma) -> b
+
+data.frame(tank = 1:48) %>%   
+  mutate(Estimate = map_dbl(a,mean)) %>% 
+  mutate(Q2.5 = map_dbl(b, ~quantile(., probs = 0.025))) %>% 
+  mutate(Q97.5 = map_dbl(b, ~quantile(., probs = 0.975))) %>% 
+  mutate(type = "student")-> post_b13M4
+
+bind_rows(post_b13M4, post_b13M3) -> post
+  
+post %>% 
+  ggplot(aes(x=tank, y=Estimate))+
+  geom_point(aes(color = type), alpha = 0.5,size = 2,
+            position = position_dodge(width = 1))+
+  geom_point(data = d,
+             aes(y = propsurv),
+             shape = 1)+
+  geom_hline(data = d,
+             yintercept = mean(d$propsurv),
+             linetype = "dashed")+
+  theme(aspect.ratio = 1)+
+  scale_color_manual(values = c("orange","blue3"))
+```
+
+### 13M5  
+> Modify the cross-classified chimpanzees model m13.4 so that the adaptive prior for blocks contains a parameter for its mean: 
+$$
+\gamma_i \sim Normal(\bar{\gamma}, \sigma_{\gamma})\\
+\bar{\gamma} \sim Normal(0,1.5)
+$$
+
+> Compare this model to m13.4. What has including done?  
+
+これも`brms`パッケージでは推定ができなそうなので、`ulam`関数を用いる。  
+```{r}
+data(chimpanzees)
+d2 <- chimpanzees
+
+d2$treatment <- 1 + d2$prosoc_left + 2 * d2$condition
+
+dat_list <- list(
+  pulled_left = d2$pulled_left,
+  actor = d2$actor,
+  block_id = d2$block,
+  treatment = as.integer(d2$treatment)
+)
+
+#b13M5 <- ulam(
+ # alist(
+  #  pulled_left ~ dbinom(1, p),
+  #  logit(p) <- a[actor] + g[block_id] + b[treatment],
+  #  b[treatment] ~ dnorm(0, 0.5),
+  #  ## adaptive priors
+  #  a[actor] ~ dnorm(a_bar, sigma_a),
+  #  g[block_id] ~ dnorm(g_bar, sigma_g),
+  #  ## hyper-priors
+  #  a_bar ~ dnorm(0, 1.5),
+  #  g_bar ~ dnorm(0, 1.5),
+  #  sigma_a ~ dexp(1),
+  #  sigma_g ~ dexp(1)
+  #),
+  #data = dat_list, chains = 4, cores = 4, log_lik = TRUE
+# )
+
+b13M5 <- readRDS("output/Chapter13/b13M5.rds")
+```
+
+それでは、`b13.4`と結果を比較する。  
+
+新しいモデル(b13M5)の有効サンプル数(n_eff)とGelman-Rubin統計量(Rhat)を見ると、そのサンプリングは非常に非効率的であることがわかる。元のモデル(b13.4)と比較すると、すべてのパラメータで有効サンプル数が大幅に悪化している。
+
+これは、b13M5はオーバー・パラメータ化されているからである。`actor`と`block`のランダム切片の平均は(ここでは、`a_bar`、`g_bar`)現在のモデルではどちらもモデルの切片の中に含まれている。そのため、これらは識別不能であり、別々に推定することはできない。  
+
+```{r}
+library(easystats)
+model_parameters(b13.4)
+```
+
+```{r}
+precis(b13M5, 2, pars = c("a_bar", "b", "g_bar"))
+```
+
+### 13M6  
+> Sometimes the prior and the data are in conflict, because they concentrate around different regions of parameter space. What happens in these cases depends a lot upon the shape of the tails of distributions. Likewise, the tails of distributions strongly influence can outliers are shrunk or not towards mean. I want you to consider four different models to fit to one observation at $y=0$. The models differ only in the distributions assigned to the likelihood and prior. Here are the four models: 
+
+$$
+\begin{aligned}
+Model \;NN: y &\sim Normal(\mu,1)\\
+\mu &\sim Normal(10,1)\\
+\\
+Model \;NT: y &\sim Normal(\mu,1)\\
+\mu &\sim Student(2,10,1)\\
+\\
+Model \;TN: y &\sim Student(2,\mu,1)\\
+\mu &\sim Normal(10,1)\\
+\\
+Model \;TT: y &\sim Student(2,\mu,1)\\
+\mu &\sim Student(2,10,1)\\
+\\
+
+\end{aligned}
+$$
+
+$y=0$の1つのデータに対する4つのモデルを比較する。
+```{r}
+d3 <- data.frame(y=0)
+
+b13M6_a <- brm(data = d3,
+             family = "gaussian",
+             formula = y ~ 1,
+             prior = c(prior(normal(10,1), class = Intercept),
+                       prior(constant(1), class = sigma)),
+             backend = "cmdstanr",
+             file = "output/Chapter13/b13M6_a")
+
+
+b13M6_b <- brm(data = d3,
+             family = student,
+             formula = y ~ 1,
+             prior = c(prior("constant(2)", class = "nu"),
+                       prior("constant(1)", class = "sigma"),
+                       prior("normal(10,1)",class= "Intercept")),
+             seed =13,          
+             backend = "cmdstanr",
+             file = "output/Chapter13/b13M6_b")
+
+b13M6_c <- brm(data = d3,
+             family = gaussian,
+             formula = y ~ 1,
+             prior = c(prior(constant(1), class = sigma),
+                    prior(student_t(2,10,1),class=Intercept)),
+             seed =13,          
+             backend = "cmdstanr",
+             file = "output/Chapter13/b13M6_c")
+
+b13M6_d <- brm(data = d3,
+             family = student,
+             formula = y ~ 1,
+             prior = c(prior(constant(2), class = nu),
+                       prior(constant(1), class = sigma),
+                    prior(student_t(2,10,1),class=Intercept)),
+             seed =13,          
+             backend = "cmdstanr",
+             file = "output/Chapter13/b13M6_d")
+```
+
+
+3つ目のモデルのみ正しく推定できた（応答変数に正規分布、事前分布にt分布）。事前分布が真の値から離れているとうまく推定できない。一方で、応答変数の分布が広すぎてもうまく推定できない？
+```{r, echo = FALSE}
+fixef_a <- fixef(b13M6_a) %>% data.frame()
+fixef_b <- fixef(b13M6_b) %>% data.frame()
+fixef_c <- fixef(b13M6_c) %>% data.frame()
+fixef_d <- fixef(b13M6_d) %>% data.frame()
+
+bind_rows(fixef_a,fixef_b, fixef_c, fixef_d) ->fixef
+rownames(fixef) <- c("model NN","model TN","model NT",
+                      "model TT")
+fixef %>% 
+  kable(booktabs = TRUE,
+        digits=2) %>%
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+### 13H1  
+> In 1980, a typical Bengali woman could have 5 or more children in her lifetime. By the year 2000, a typical Bengali woman had only 2 or 3. You’re going to look at a historical set of data, when contraception was widely available but many families chose not to use it. These data reside in data(bangladesh) and come from the 1988 Bangladesh Fertility Survey. Each row is one of 1934 women. There are six variables, but you can focus on three of them for this practice problem:
+
+>(1) district: ID number of administrative district each woman resided in
+>(2) use.contraception: An indicator (0/1) of whether the woman was using contraception
+>(3) urban: An indicator (0/1) of whether the woman lived in a city, as opposed to living in a rural area
+
+>The first thing to do is ensure that the cluster variable, district, is a contiguous set of integers. Recall that these values will be index values inside the model. If there are gaps, you’ll have parameters for which there is no data to inform them. Worse, the model probably won’t run. Look at the unique values of the district variable:  
+
+```{r}
+data(bangladesh)
+d4 <- bangladesh
+sort(unique(d4$district))
+```
+
+> District 54 is absent. So district isn’t yet a good index variable, because it’s not contiguous. This is easy to fix. Just make a new variable that is contiguous. This is enough to do it:  
+
+```{r}
+d4$district_id <- as.integer(as.factor(d4$district))
+sort(unique(d4$district_id))
+```
+
+> ow there are 60 values, contiguous integers 1 to 60. Now, focus on predicting use.contraception, clustered by district_id. Do not include urban just yet. Fit both (1) a traditional fixed-effects model that uses dummy variables for district and (2) a multilevel model with varying intercepts for district. Plot the predicted proportions of women in each district using contraception, for both the fixed-effects model and the varying-effects model. That is, make a plot in which district ID is on the horizontal axis and expected proportion using contraception is on the vertical. Make one plot for each model, or layer them on the same plot, as you prefer. How do the models disagree? Can you explain the pattern of disagreement? In particular, can you explain the most extreme cases of disagreement, both why they happen where they do and why the models reach different inferences?  
+
+バングラデシュの産子数に関するデータ。  
+- `district`: 女性の住んでいた地区。  
+- `use.contraception`: 避妊を行ったか否か。  
+
+```{r}
+data("bangladesh")
+d4 <- bangladesh
+
+glimpse(d4)
+```
+
+避妊の有無が、地区によってどのくらいばらついていたのかを推定。
+固定効果とランダム効果に地区名を入れたモデルをそれぞれまわす。  
+
+```{r}
+d4 %>% 
+  mutate(district = factor(district)) -> d4
+
+b13H1a <- brm(
+  data = d4,
+  family = bernoulli,
+  formula = use.contraception ~ 0 + district,
+  prior = prior(normal(0,3), class = b),
+  backend = "cmdstanr",
+  seed = 13, file = "output/Chapter13/b13H1a"
+)
+
+b13H1b <- brm(
+  data = d4,
+  family = bernoulli,
+  formula = use.contraception ~ 1 + (1|district),
+  prior = c(prior(normal(0,3), class = Intercept),
+            prior(exponential(1), class =sd)),
+  backend = "cmdstanr",
+  seed = 13, file = "output/Chapter13/b13H1b"
+)
+
+```
+
+ランダム効果モデルでは縮合が起きて、元データの平均（点線）に近づいていることが分かる。また、データ数が少ない地区（十字架が小さい地区）ほどより縮合が起きている。  
+```{r, echo = FALSE, out.width = "100%", fig.height = 5.5}
+nd <- d4 %>% 
+  distinct(district)
+
+fita <- fitted(b13H1a,
+               newdata = nd) %>% 
+  　　　data.frame() %>% 
+        bind_cols(nd) %>% 
+        mutate(type = "fixed") 
+
+fitb <- fitted(b13H1b,
+               newdata = nd,
+               re_formula = ~(1|district)) %>% 
+        data.frame() %>% 
+        bind_cols(nd) %>% 
+        mutate(type = "random")
+
+raw <- d4 %>% 
+  group_by(district) %>% 
+  summarise(prop = mean(use.contraception),
+            n = n())
+
+bind_rows(fita, fitb) %>% 
+  mutate(mean = mean(d4$use.contraception)) %>% 
+  left_join(raw) %>% 
+  ggplot(aes(x=district))+
+  geom_pointinterval(aes(y = Estimate, 
+             ymin = Q2.5, ymax = Q97.5, color = type),
+                     position = position_dodge(width = 1.2))+
+  geom_point(aes(y=prop, size =n), shape = 3, alpha =1/2)+
+  geom_hline(aes(yintercept = mean), linetype = "dotted")+
+  scale_color_manual(values = c("orange","navy"))+
+  scale_size_continuous(range = c(0,3))+
+  theme(aspect.ratio=0.5,
+        legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+```
+
+### 13H2  
+> Return to the Trolley data, data(Trolley), from Chapter 12. Define and fit a varying intercepts model for these data. Cluster intercepts on individual participants, as indicated by the unique values in the id variable. Include action, intention, and contact as ordinary terms. Compare the varying intercepts model and a model that ignores individuals, using both WAIC and posterior predictions. What is the impact of individual variation in these data?
+
+Chapter12でも用いたトロッコ問題のデータ[@Cushman2006]を用いる。被験者のIDをランダム効果に入れる。
+```{r}
+data(Trolley)
+d5 <- Trolley
+```
+
+```{r}
+inits <- list(`Intercept[1]` = -2,
+              `Intercept[2]` = -1,
+              `Intercept[3]` = 0,
+              `Intercept[4]` = 1,
+              `Intercept[5]` = 2,
+              `Intercept[6]` = 2.5)
+
+inits_list <- list(inits, inits, inits, inits)
+
+b13H2 <-
+  brm(data = d5,
+      family = cumulative,
+      response ~ 1 + action + contact + intention +
+        intention:action + intention:contact + (1|id),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 6500, warmup = 4000, cores = 4, chains = 4,
+      seed = 12,
+      backend = "cmdstanr",
+      file = "output/Chapter13/b13H2")
+
+b12.5 <- readRDS("output/Chapter12/b12.5.rds")
+```
+
+結果は以下の通り（表\@ref(tab:res-b13H2)）。ランダム効果を含む方が推定値が0から離れている。これは、ランダム効果がデータのばらつきの多くを説明しているため、説明変数の効果がより明確になったから？
+```{r res-b13H2, echo = FALSE}
+b12.5 %>% 
+  posterior_summary() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par,"b_")) %>% 
+  set_names(c("par","Est_f","SE_f","Q2.5_f","Q97.5_f")) -> r_fix
+
+b13H2 %>% 
+  posterior_summary() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par,"b_|sd")) %>% 
+  set_names(c("par","Est_r","SE_r","Q2.5_r","Q97.5_r")) -> r_random
+
+r_random  %>% 
+  full_join(r_fix) %>% 
+  mutate(across(where(is.numeric), ~ round(.x,2)))-> r_full
+
+r_full[is.na(r_full)] <- "-"
+
+r_full %>% 
+  kable(booktabs = TRUE, 
+        caption = "モデルの比較2",
+        digits =2,
+        col.names = c("par", rep(c("Estimate","SE","Q2.5","Q97.5"),2)),
+          align = "c") %>% 
+  add_header_above(c("", "including random"=4, "fixed only"=4)) %>% 
+  kable_styling(latex_options = c("striped","hold_position",
+                                  "repeat_header","scale_down"))
+```
+
+予測分布を描くと以下の通り。
+```{r, echo = FALSE, fig.height = 5}
+d5 %>% 
+  distinct(action, contact, intention) %>% 
+  mutate(combination = str_c(action, contact, intention, sep = "_"))-> nd
+  
+predict(b12.5, newdata = nd, scale = "response",
+        summary = F) %>% 
+  data.frame() %>% 
+  set_names(pull(nd, combination)) %>% 
+  pivot_longer(everything(),
+names_to = c("action", "contact", "intention"),
+names_sep = "_",
+values_to = "response") -> pred_a
+
+pred_a %>% 
+  group_by(action, contact, intention, response) %>% 
+  summarise(n= n()) %>% 
+  ungroup() %>% 
+  group_by(action, contact, intention) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  mutate(cum_p = cumsum(prop)) %>% 
+  mutate(facet = str_c("action=",action,
+                       ", contact=",contact))-> pred_a2
+
+predict(b13H2, newdata = nd, scale = "response",
+        summary = F, re_formula = NA) %>% 
+  data.frame() %>% 
+  set_names(pull(nd, combination)) %>% 
+  pivot_longer(everything(),
+names_to = c("action", "contact", "intention"),
+names_sep = "_",
+values_to = "response") -> pred_b
+
+pred_b %>% 
+  group_by(action, contact, intention, response) %>% 
+  summarise(n= n()) %>% 
+  ungroup() %>% 
+  group_by(action, contact, intention) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  mutate(cum_p = cumsum(prop)) %>% 
+  mutate(facet = str_c("action=",action,
+                       ", contact=",contact))-> pred_b2
+
+pred_a2 %>% 
+  ggplot(aes(x = response, y = cum_p, color = intention)) +
+  geom_point()+
+  geom_line()+
+  scale_x_continuous(breaks = seq(1,7,by=1))+
+  theme(strip.background  = element_blank())+
+  scale_color_manual(values = c("orange1","navy"))+
+  facet_wrap(~facet)+
+  ggtitle(label = "fixed effects only")-> p7
+
+pred_b2 %>% 
+  ggplot(aes(x = response, y = cum_p, color = intention)) +
+  geom_point()+
+  geom_line()+
+  scale_x_continuous(breaks = seq(1,7,by=1))+
+  theme(strip.background  = element_blank())+
+  scale_color_manual(values = c("orange1","navy"))+
+  facet_wrap(~facet)+
+  ggtitle(label = "including random id")-> p8
+
+(p7/p8)
+```
+
+最後に、WAICを比較すると以下の通り。圧倒的にランダム効果を含んだ方がよい。    
+```{r}
+b12.5 <- add_criterion(b12.5, "waic")
+b13H2 <- add_criterion(b13H2, "waic")
+
+loo_compare(b12.5, b13H2, criterion="waic") %>% 
+  print(simplify = FALSE) %>% 
+  kable(booktabs = TRUE,
+        digits=2) %>%
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+### 13H3  
+> The Trolley data are also clustered by story, which indicates a unique narrative for each vignette. Define and fit a cross-classified varying intercepts model with both id and story. Use the same ordinary terms as in the previous problem. Compare this model to the previous models. What do you infer about the impact of different stories on responses?  
+
+先ほどのモデルに、`story`もランダム効果に加える。  
+```{r}
+b13H3 <-
+  brm(data = d5,
+      family = cumulative,
+      response ~ 1 + action + contact + intention +
+        intention:action + intention:contact + 
+        (1|id) +(1|story),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.5), class = b)),
+      iter = 6500, warmup = 5000, cores = 4, chains = 4,
+      seed = 12,
+      backend = "cmdstanr",
+      file = "output/Chapter13/b13H3")
+
+b13H3 %>% 
+  posterior_summary() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par,"b_|sd")) %>% 
+  set_names(c("par","Est_r2","SE_r2","Q2.5_r2","Q97.5_r2")) -> r_random2
+```
+
+`id`のみをランダム効果に入れたモデルとの比較は以下の通り（表\@ref(tab:res-b13H3)）。少し推定値に違いが出ている。
+
+```{r res-b13H3}
+r_random2  %>% 
+  full_join(r_random) %>% 
+  mutate(across(where(is.numeric), ~ round(.x,2)))-> r_full2
+
+r_full2[is.na(r_full2)] <- "-"
+
+r_full2 %>% 
+  kable(booktabs = TRUE, 
+        caption = "モデルの比較3",
+        digits =2,
+        col.names = c("par", rep(c("Estimate","SE","Q2.5","Q97.5"),2)),
+          align = "c") %>% 
+  add_header_above(c("", "id + story"=4, "id only"=4)) %>% 
+  kable_styling(latex_options = c("striped","hold_position",
+                                  "repeat_header","scale_down"))
+
+```
+
+WAIを比較すると以下の通り。`story`もランダム効果に含んだモデルの方が少しだけ良い。  
+```{r}
+b13H3 <- add_criterion(b13H3, "waic")
+
+loo_compare(b13H3, b13H2, criterion="waic") %>% 
+  print(simplify = FALSE) %>% 
+  kable(booktabs = TRUE,
+        digits=2) %>%
+  kable_styling(latex_options = c("striped","hold_position"))
+```
+
+### 13H4  
+> Revisit the Reed frog survival data, `data(reedfrogs)`, and add the `predation` and `size` treatmenr variables to the varying intercepts model. Consider models with either predictor alone, both predictors, as well as a model including their interactions. What do you infer about the causal influence of these predictor variables? Also focus on the inferred variation across tanks (th $\sigma$ across tanks). Explain why it changes as it does across models with different predictors included. 
+
+再び`reed frog`データで、`pred`と`size`もランダム効果に入れてみる。  
+```{r}
+b13H4 <- 
+  brm(data =dd,
+      family = binomial,
+      formula = surv|trials(density) ~ 1 + (1|tank) + (1|size)+
+        (1|pred),
+      prior = c(prior(normal(0,1.5), class = Intercept),
+                prior(exponential(1), class = sd)),
+      control = list(adapt_delta =.999),
+      iter = 6000, warmup=5000,
+      seed = 15, file = "output/Chapter13/b13H4",
+    backend = "cmdstanr",
+      )
+```
+
+これまでのモデルと比較する（表\@ref(tab:comp-waic2)）。そこまで大きな違いはない。    
+```{r comp-waic2}
+b13H4 <- add_criterion(b13H4, "waic")
+
+loo_compare(b13M1a,b13M1b,b13M1c,b13M1d, b13H4,criterion="waic") %>% 
+  print(simplify = F) %>% 
+  kable(digits = 2,
+        booktabs = TRUE,
+        caption = "WAICの比較2。") %>% 
+  kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+交互作用も含むモデルと事後分布を比較すると以下の通り。すべてではないが、全部ランダム効果に入れたモデルの方がより縮合が起きている？  
+```{r, echo = FALSE, out.width= "100%", fig.height = 5.5}
+nd <- distinct(dd, pred, tank, size, density) 
+
+fit13H4_a <- 
+  fitted(b13M1d, newdata = nd,
+         scale = "linear") %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  mutate(type = "b13M1a")
+
+fit13H4_b <- 
+  fitted(b13H4, newdata = nd,
+         scale = "linear") %>% 
+  data.frame() %>% 
+  bind_cols(nd) %>% 
+  mutate(type = "b13H4")
+
+dd %>% 
+  group_by(pred, size) %>% 
+  summarise(mean = mean(propsurv)) -> mean
+
+library(lemon)
+
+bind_rows(fit13H4_a, fit13H4_b) %>% 
+  mutate(across(1:4, inv_logit_scaled)) %>% 
+  ggplot(aes(x=tank))+
+  geom_pointinterval(aes(y = Estimate, 
+             ymin = Q2.5, ymax = Q97.5, color = factor(type)),position = position_dodge(1))+
+  geom_point(data = dd, aes(y=propsurv), shape = 3)+
+  geom_hline(data = mean, aes(yintercept = mean),
+             linetype = "dotted")+
+  scale_color_manual(values = c("orange1","navy"))+
+  facet_rep_grid(pred~size, labeller = label_both,
+                 repeat.tick.labels = TRUE,
+                 scales = "free")+
+  theme(strip.background = element_blank())+
+  theme(legend.position = "bottom")
+
+```
+
+ランダム効果`tank`の標準偏差の推定値はほとんど変わらない。  
+```{r}
+posterior_summary(b13H4) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par,"sd")) %>% 
+  kable(booktabs =TRUE,
+        digits =2) %>% 
+  kable_styling(latex_options = c("hold_position", "striped"))
+
+posterior_summary(b13M1d) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "par") %>% 
+  filter(str_detect(par,"sd")) %>% 
+  kable(booktabs =TRUE,
+        digits =2) %>% 
+  kable_styling(latex_options = c("hold_position", "striped"))
+```

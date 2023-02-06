@@ -1,0 +1,1948 @@
+# Geocentric Model  
+## Why normal distributions are normal  
+ランダムウォークを繰り返すと、分布が正規分布にちかづいていく。
+```{r}
+pos <- 
+  crossing(person = 1:100,
+           step = 0:16) %>% 
+  mutate(dev = map_dbl(step, ~ifelse(.==0,0,runif(1,-1,1)))) 
+
+pos <- pos %>% 
+  group_by(person) %>% 
+  mutate(sum_dev = cumsum(dev)) %>% 
+  ungroup()
+
+#Figure4.2
+##above
+
+pos %>% 
+  ggplot(aes(x=step,y=sum_dev,group=person))+
+  geom_line(aes(color = person < 2, 
+                alpha  = person < 2))+
+  geom_vline(xintercept=c(4,8,16), linetype=2)+
+  scale_color_manual(values = c("skyblue4", "black"))+
+  scale_alpha_manual(values = c(1/5, 1))+
+  scale_x_continuous("step number", breaks = seq(0,16,2))+
+  theme(legend.position = "none") 
+
+
+p1 <- pos %>% 
+  filter(step==4) %>% 
+  ggplot(aes(x=sum_dev))+
+  geom_line(stat = "density")+
+  labs("4 steps")
+
+p2 <- pos %>% 
+  filter(step==8) %>% 
+  ggplot(aes(x=sum_dev))+
+  geom_line(stat = "density")+
+  labs("8 steps")
+
+pos %>% 
+  filter(step==16) %>% 
+  summarise(sd = sd(sum_dev)) ->sd
+
+p3 <- pos %>% 
+  filter(step==16) %>% 
+  ggplot(aes(x=sum_dev))+
+  stat_function(fun = dnorm, 
+                args = list(mean = 0, sd = sd[[1]]),
+                linetype = 2)+
+  geom_density(color = "transparent", fill = "dodgerblue3", alpha = 1/2) +
+  
+  labs("16 steps")
+
+library(patchwork)
+
+p1|p2|p3 & coord_cartesian(xlim=c(-6,6))
+```
+
+## Normal by multiplication  
+掛け算になる場合でも、変化が小さければ正規分布に近づくことがある。
+```{r}
+set.seed(4)
+prod(1 + runif(12, 0, 0.1))
+
+growth <- tibble(growth = map_dbl(1:10000, ~ prod(1 + runif(12, 0, 0.1))))
+
+ggplot(data = growth, aes(x = growth)) +
+  geom_density()
+```
+<br />
+
+成長にもたらす効果が小さいほど、効果の積が効果の和に近づくので、正規分布に近づく。
+```{r}
+growth_big <- tibble(growth = map_dbl(1:10000, ~ prod(1 + runif(12, 0, 0.5))))
+
+growth_small <- tibble(growth = map_dbl(1:10000, ~ prod(1 + runif(12, 0, 0.01))))
+
+ggplot(data = growth_big, aes(x = growth)) +
+  geom_density()
+
+ggplot(data = growth_small, aes(x = growth)) +
+  geom_density()
+
+```
+<br />
+
+効果が大きいときも、対数をとると正規分布に近づく。これは、対数では積と和が等しくなることによる。
+```{r}
+log_growth_big <- log(growth_big)
+ggplot(data = log_growth_big, aes(x = growth)) +
+  geom_density()
+```
+
+## Gaussian model of height
+クンサン族の身長データでモデリングを行う。  
+データは、Howellらが収集したデータ。身長は18歳以下では年齢と強く相関するので、ひとまず18歳以上を考える。
+```{r}
+data(Howell1)
+
+(d <- as_tibble(Howell1))
+
+str(d)
+precis(d, hist = FALSE)
+
+# 18歳以下に限定
+d2 <- d %>% 
+  filter(age >= 18)
+```
+<br />  
+
+身長についてモデリングを行う。  
+
+```{r}
+d2 %>% 
+  ggplot(aes(x=height))+
+  geom_histogram(binwidth =5, fill="grey92",color="black")+
+  theme_bw()
+
+```
+<br />    
+
+身長は正規分布していると思われるため、モデル式は以下の通りとする。
+
+$h_{i} \sim Normal(\mu, \sigma)$
+<br />
+
+事前分布は以下のとおりとする。  
+$\mu \sim Normal(178, 20)$  
+$\sigma \sim Uniform(0,50)$
+
+<br />  
+
+事前分布を確認する。
+```{r}
+# mu
+p1 <- tibble(x = seq(from = 100, to = 250, by = .1)) %>% 
+  ggplot(aes(x = x, y = dnorm(x, mean = 178, sd = 20))) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(from = 100, to = 250, by = 75)) +
+  labs(title = "mu ~ dnorm(178, 20)",y = "density")
+
+p1
+
+#sigma
+p2 <- tibble(x = seq(from = -10, to = 60, by = .1)) %>% 
+  ggplot(aes(x = x, y = dunif(x, min=0,max=50))) +
+  geom_line() +
+  scale_x_continuous(breaks = seq(from = 0, to = 50, by = 10)) +
+  labs(title = "sigma ~ dunif(0,50)",y = "density")
+
+p2
+```
+<br />  
+
+事前分布からサンプリングをしてみる。  
+```{r}
+n <- 1e4
+set.seed(4)
+
+sim <- 
+  tibble(sample_mu = rnorm(n,178,20),
+         sample_sigma = runif(n,0,50)) %>% 
+  mutate(height = rnorm(n, sample_mu, sample_sigma))
+
+p3 <- 
+sim %>% 
+  ggplot(aes(x=height))+
+  geom_density(fill="grey33")+
+  scale_x_continuous(breaks = c(0, 73, 178, 283)) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  ggtitle("height ~ dnorm(mu, sigma)") +
+  theme(panel.grid = element_blank())
+
+p3
+```
+<br />  
+
+$\mu \sim Normal(178, 100)$ が事前分布だとすると... 
+```{r}
+sim2 <-
+  tibble(sample_mu    = rnorm(n, mean = 178, sd = 100),
+         sample_sigma = runif(n, min = 0, max = 50)) %>% 
+  mutate(height = rnorm(n, mean = sample_mu, sd = sample_sigma))
+
+# compute the values we'll use to break on our x axis
+breaks <-
+  c(mean(sim2$height) - 3 * sd(sim2$height), 0, mean(sim2$height), mean(sim2$height) + 3 * sd(sim2$height)) %>% 
+  round(digits = 0)
+
+text <-
+  tibble(height = 272-25 ,
+         y      = .0013,
+         label  = "tallest man",
+         angle  = 90)
+
+p4 <-
+  sim2 %>% 
+  ggplot(aes(x = height)) +
+  geom_density(fill = "black", size = 0) +
+  geom_vline(xintercept = 0, color = "grey92") +
+  geom_vline(xintercept = 272, color = "grey92", linetype = 3) +
+  geom_text(data = text,
+            aes(y = y, label = label, angle = angle),
+            color = "grey92", size = 4) +
+  scale_x_continuous(breaks = breaks) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  ggtitle("height ~ dnorm(mu, sigma)\nmu ~ dnorm(178, 100)") +
+  theme(panel.grid = element_blank())
+
+p4
+```
+
+全部並べてみると...。  
+$\mu$の事前分布の標準偏差が大きすぎると、身長の事前分布もかなり広くなってしまうことが分かる。身長が負の人や、250cmを越えるような人がいることを仮定していることになる。
+```{r}
+(p1+xlab("mu")|p2+xlab("sigma"))/(p3|p4)
+```
+
+```{r}
+#身長0未満
+sim2 %>% 
+  count(height < 0) %>% 
+  mutate(percent = 100 * n / sum(n))
+
+#身長250以上
+sim2 %>% 
+  count(height >=250) %>% 
+  mutate(percent = 100 * n / sum(n))
+```
+<br />
+
+## Grid approximationで事後分布を描く
+計算には対数尤度を用い、その後戻す。
+```{r}
+n <- 200
+
+d_grid <- 
+  crossing(mu = seq(140,160,length.out=n),
+           sigma = seq(4,9,length.out=n))
+
+grid_function <- function(mu,sigma){
+  dnorm(d2$height, mean = mu, sd = sigma, log = T) %>% 
+    sum()
+}
+
+d_grid <-
+  d_grid %>% 
+  mutate(LL = map2(mu, sigma, grid_function)) %>% 
+  unnest(LL) %>% 
+  mutate(prod = LL + dnorm(mu, 178,20,TRUE)+
+           dunif(sigma,0,50,TRUE)) %>%
+    mutate(prob = exp(prod-max(prod)))
+```
+<br />  
+
+事後同時分布を表すと以下のようになる。
+```{r}
+
+d_grid %>% 
+  ggplot(aes(x=mu, y=sigma, z = prob))+
+  geom_contour()+
+  labs(x=expression(mu),y=expression(sigma))+
+  coord_cartesian(xlim = range(d_grid$mu),
+                  ylim=range(d_grid$sigma))+
+  theme(panel.grid = element_blank())
+
+
+d_grid %>% 
+  ggplot(aes(x = mu, y = sigma, fill = prob)) + 
+  geom_raster(interpolate = F) +
+  scale_fill_viridis_c(option = "B") +
+  labs(x = expression(mu),
+       y = expression(sigma)) +
+  theme(panel.grid = element_blank())
+
+#ちなみに
+d_grid %>% 
+  filter(prob==max(prob))
+```
+
+### 事後分布からサンプリングする
+```{r}
+set.seed(4)
+
+samples_d <- 
+  d_grid %>% 
+  slice_sample(n=1e4, weight_by = prob, replace= TRUE)
+```
+
+$\mu$と$\sigma$の事後分布からのサンプルより
+```{r}
+# muの区間推定
+bind_rows(median_hdi(samples_d$mu, .width=0.95),
+          mean_qi(samples_d$mu, .width=0.95))
+
+#sigmaの区間推定
+bind_rows(median_hdi(samples_d$sigma, .width=0.95),
+          mean_qi(samples_d$sigma, .width=0.95))
+
+# 同時分布
+samples_d %>% 
+  ggplot(aes(x=mu, y=sigma))+
+  geom_point(size=0.9,alpha=1/30)+
+  labs(x=expression(mu[samples]),y=expression(sigma[samples]))+
+  theme(panel.grid = element_blank())
+
+# それぞれの周辺事後分布
+samples_d %>% 
+  pivot_longer(cols = mu:sigma, names_to = "param", values_to = "value") %>% 
+  ggplot(aes(x=value))+
+  geom_histogram(binwidth=0.1,fill="grey33")+
+  scale_y_continuous(NULL, breaks = NULL) +
+  xlab(NULL) +
+  theme(panel.grid = element_blank())+
+  facet_wrap(~param, scale="free",labeller = label_parsed)
+  
+```
+
+### rethinking
+```{r}
+set.seed(4)
+(d3 <- sample(d2$height, size = 20))
+
+n <- 200
+
+# note we've redefined the ranges of `mu` and `sigma`
+d_grid <-
+  crossing(mu= seq(from = 150,to = 170,length.out= n),
+           sigma =seq(from =4, to = 20,length.out= n))
+
+
+grid_function <- function(mu, sigma) {
+  
+  dnorm(d3, mean = mu, sd = sigma, log = T) %>% 
+    sum()
+  
+}
+
+d_grid <-
+  d_grid %>% 
+  mutate(log_likelihood = map2_dbl(mu, sigma, grid_function)) %>% 
+  mutate(prior_mu    = dnorm(mu, mean = 178, sd = 20, log = T),
+         prior_sigma = dunif(sigma, min = 0, max = 50, log = T)) %>% 
+  mutate(product = log_likelihood + prior_mu + prior_sigma) %>% 
+  mutate(probability = exp(product - max(product)))
+
+
+set.seed(4)
+
+d_grid_samples <- 
+  d_grid %>% 
+  sample_n(size = 1e4, replace = TRUE, weight = probability)
+
+d_grid_samples %>% 
+  ggplot(aes(x = mu, y = sigma)) + 
+  geom_point(size = .9, alpha = 1/15) +
+  labs(x = expression(mu[samples]),
+       y = expression(sigma[samples])) +
+  theme(panel.grid = element_blank())
+
+d_grid_samples %>% 
+  pivot_longer(mu:sigma) %>% 
+
+  ggplot(aes(x = value)) + 
+  geom_density(fill = "grey33", size = 0) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  xlab(NULL) +
+  theme(panel.grid = element_blank()) +
+  facet_wrap(~ name, scales = "free", labeller = label_parsed)
+```
+
+### Finding posterior with brms
+quapとbrmsを用いてモデリングを行う。
+```{r}
+# quap
+#flist <- alist(
+  #height ~ dnorm(mu,sigma),
+  #mu ~ dnorm(178,20),
+  #sigma ~ dunif(0,50)
+#)
+
+#m4.1 <- quap(flist, data=d2)
+#precis(m4.1, prob=.95)
+
+# brms
+b4.1 <- 
+  brm(
+    data = d2,
+    family = gaussian,
+    height ~ 1,
+    prior = c(prior(normal(178,20),class=Intercept),
+              prior(cauchy(0,1), class=sigma)),
+    iter=2000,warmup=1000,chains =4,
+      backend = "cmdstanr",
+    file = "output/Chapter4/b4.1")
+
+plot(b4.1)
+print(b4.1)
+
+b4.1$fit
+```
+<br />
+
+続いて、$\mu$の事前分布の標準偏差を0.1にしてみる。  
+かなり事前分布に引っ張られていることが分かる。
+```{r}
+b4.1_2 <- 
+  brm(
+    data = d2,
+    family = gaussian,
+    height ~ 1,
+    prior = c(prior(normal(178,0.1),class=Intercept),
+              prior(cauchy(0,1), class=sigma)),
+    iter=2000,warmup=1000,chains =4,
+      backend = "cmdstanr",
+    file = "output/Chapter4/b4.1_2"
+  )
+
+plot(b4.1_2)
+b4.1_2$fit
+
+# 比較
+rbind(summary(b4.1)$fixed,
+      summary(b4.1_2)$fixed)
+
+```
+
+### 事後分布からのサンプリング
+MCMCではすでにサンプリングを行っている。
+```{r}
+post <- posterior_samples(b4.1)
+
+# 分散・共分散行列
+post %>% 
+  dplyr::select(b_Intercept, sigma) %>% 
+  cov()
+
+# 相関行列
+post %>% 
+  dplyr::select(b_Intercept, sigma) %>% 
+  cor()
+
+# summary of the samples
+post %>%
+  pivot_longer(-lp__) %>% 
+  group_by(name) %>%
+  summarise(mean = mean(value),
+            sd   = sd(value),
+            `2.5%`  = quantile(value, probs = .025),
+            `97.5%` = quantile(value, probs = .975))
+```
+
+## Linear prediction
+身長と体重の関係をモデリングする。  
+両者の間には強い相関がある。
+```{r}
+ggplot(d2,aes(x=weight,y=height))+
+  geom_point(shape=1,size=2)+
+  theme_bw()+
+  theme(panel.grid = element_blank())
+```
+<br />  
+
+以下のモデルを考える。  
+$h_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = \alpha + \beta(x_{i}-\bar{x})$  
+$\alpha \sim Normal(172, 20)$  
+$\beta \sim Normal(0, 10)$  
+$\sigma \sim Uniform(0, 50)$  
+<br />  
+
+事前分布からサンプリングした$\alpha$と$\beta$について回帰直線を引いてみる。
+```{r}
+set.seed(2971)
+n <- 100
+
+lines <-
+  tibble(n = 1:n,
+         a = rnorm(n, mean = 178, sd = 20),
+         b = rnorm(n, mean = 0, sd = 10)) %>% 
+  tidyr::expand(nesting(n, a, b), weight = range(d2$weight)) %>% 
+  mutate(height = a + b * (weight - mean(d2$weight)))
+
+head(lines)
+
+# 直線を引く
+lines %>% 
+  ggplot(aes(x=weight, y=height, group = n))+
+  geom_line(alpha=1/4)+
+  geom_hline(yintercept = c(0,272), linetype = c(2,1), size = 1/3)+
+  scale_x_continuous("weight", breaks = seq(30,60,10))+
+  scale_y_continuous("height", breaks = seq(-100,400,100))+
+  coord_cartesian(ylim = c(-100,400))+
+  ggtitle("b ~ dnorm(0,10)")+
+  theme_classic()+
+  theme(aspect.ratio=1)
+
+```
+<br />  
+
+身長と体重の関係はマイナスではないと分かっている場合、不適切である。  
+そこで、Log-Normalを用いる。 
+$ \beta \sim Log-Normal(0, 1)$
+
+```{r}
+set.seed(4)
+
+tibble(b = rlnorm(1e4, mean =0, sd =1)) %>% 
+  ggplot(aes(x=b))+
+  geom_density(fill="grey92")+
+  coord_cartesian(xlim=c(0,5))+
+  theme_classic()+
+  theme(aspect.ratio=0.8)
+
+# シミュレーション
+lines_2 <-
+  tibble(n = 1:n,
+         a = rnorm(n, mean = 178, sd = 20),
+         b = rlnorm(n, mean = 0, sd = 1)) %>% 
+  tidyr::expand(nesting(n, a, b), weight = range(d2$weight)) %>% 
+  mutate(height = a + b * (weight - mean(d2$weight)))
+
+text <-
+  tibble(weight = c(34, 43),
+         height = c(0 - 25, 272 + 25),
+         label  = c("Embryo", "World's tallest person (272 cm)"))
+
+lines_2 %>% 
+  ggplot(aes(x=weight, y=height, group = n))+
+  geom_line(alpha=1/4)+
+  geom_hline(yintercept = c(0,272), linetype = c(2,1), size = 1/3)+
+  scale_x_continuous("weight", breaks = seq(30,60,10))+
+  scale_y_continuous("height", breaks = seq(-100,400,100))+
+  coord_cartesian(ylim = c(-100,400))+
+  ggtitle("b ~ dnorm(0,10)")+
+  theme_classic()+
+  geom_text(data = text,
+            aes(label = label),
+            size = 3)+
+  theme(aspect.ratio=1)
+```
+<br />
+
+### Finding the posterior distribution
+brmsで事後分布を求める。  
+quapとほとんど同じ結果が得られた。
+<br /> 
+```{r}
+d2 <-
+  d2 %>% 
+  mutate(weight_c = weight - mean(weight))
+
+b4.3 <- 
+  brm(data = d2, 
+      family = gaussian,
+      height ~ 1 + weight_c,
+      prior = c(prior(normal(178, 20),clas =Intercept),
+                prior(lognormal(0, 1), class = b,lb=0),
+                prior(cauchy(0, 1), class = sigma)),
+      iter = 28000, warmup = 27000, chains = 4, 
+      cores = 4, seed = 4,
+      backend = "cmdstanr",
+      file="output/Chapter4/b4.3")
+
+summary(b4.3)$fixed
+sample <- posterior_samples(b4.3) 
+
+sample %>% 
+  dplyr::select(-lp__) %>% 
+  pivot_longer(1:3) %>% 
+  group_by(name) %>% 
+  summarise(mean = mean(value),
+            sd   = sd(value),
+            `2.5%`  = quantile(value, probs = .055),
+            `97.5%` = quantile(value, probs = .945))
+```
+<br />  
+
+パラメータ間の相関はなさそう。
+```{r}
+# 共分散
+sample %>% 
+  dplyr::select(-lp__) %>% 
+  cov() %>% 
+  round(digits=3)
+
+# ヒストグラムと散布図
+pairs(b4.3)
+```
+
+### Plotting posterior inference agaist the data
+事後分布の平均を用いて回帰直線を引く。
+```{r}
+d2 %>% 
+  ggplot(aes(x=weight_c,y=height))+
+  geom_point(size=2,shape=1, color="royalblue")+
+  geom_abline(intercept = mean(sample$b_Intercept),
+         slope = mean(sample$b_weight_c))+
+  theme_classic()+
+  theme(aspect.ratio=1)
+
+```
+<br />  
+
+最初のN行だけを用いてモデリングしてみる。
+```{r}
+N <- 10
+
+b4.3_10 <- 
+  brm(data = d2 %>% 
+        slice(1:N), 
+      family = gaussian,
+      height ~ 1 + weight_c,
+      prior = c(prior(normal(178, 20),class=Intercept),
+                prior(lognormal(0,1),class =b,lb=0),
+                prior(cauchy(0, 1),class = sigma)),
+      iter = 11000, warmup = 10000, chains = 4, 
+      backend = "cmdstanr",
+      file = "output/Chapter4/b4.3_10",
+      cores = 4, seed = 4)
+
+N <- 50
+
+b4.3_50 <- 
+  brm(data = d2 %>% 
+        slice(1:N), 
+      family = gaussian,
+      height ~ 1 + weight_c,
+      prior = c(prior(normal(178, 20),class=Intercept),
+                prior(lognormal(0,1),class =b,lb=0),
+                prior(cauchy(0, 1),class = sigma)),
+      iter = 11000, warmup = 10000, chains = 4, 
+      backend = "cmdstanr",
+      file = "output/Chapter4/b4.3_50",
+      cores = 4, seed = 4)
+
+N <- 150
+
+b4.3_150 <- 
+  brm(data = d2 %>% 
+        slice(1:N), 
+      family = gaussian,
+      height ~ 1 + weight_c,
+      prior = c(prior(normal(178, 20),class=Intercept),
+                prior(lognormal(0,1),class =b,lb=0),
+                prior(cauchy(0, 1),class = sigma)),
+      iter = 11000, warmup = 10000, chains = 4, 
+      backend = "cmdstanr",
+      file = "output/Chapter4/b4.3_150",
+      cores = 4, seed = 4)
+```
+<br />  
+
+それぞれの事後分布から20サンプルずつを抽出して回帰直線を書く。もともとのN数が多いほど、回帰直線のばらつきは小さくなっていることが分かる。
+```{r}
+# 20サンプルを抽出
+sample_10 <- sample_n(posterior_samples(b4.3_10),
+                      size=20, replace=TRUE) %>% 
+  mutate(n=rep(10,20))
+sample_50 <- sample_n(posterior_samples(b4.3_50),
+                      size=20, replace=TRUE) %>% 
+  mutate(n=rep(50,20))
+sample_150 <- sample_n(posterior_samples(b4.3_150),
+                      size=20, replace=TRUE) %>% 
+  mutate(n=rep(150,20))
+sample_392 <- sample_n(sample,size=20,replace=TRUE) %>%
+  mutate(n=rep(392,20))
+
+sample_all <- rbind(sample_10,sample_50,sample_150,sample_392) %>% 
+  dplyr::select(-lp__,-sigma) %>% 
+  rename(alpha = b_Intercept, beta = b_weight_c)
+
+for(i in c(10,50,150,392)){
+sample_n <- sample_all %>% 
+  filter(n==i)
+
+p <- 
+  d2 %>% 
+    slice(1:i) %>% 
+    ggplot(aes(x=weight_c,y=height))+
+  geom_point(size=2,shape=1, color="royalblue")+
+  geom_abline(intercept = sample_n$alpha,
+              slope = sample_n$beta,
+              size=1/3, alpha=1/3)+
+  theme_classic()+
+  theme(aspect.ratio=1)+
+  labs(subtitle = str_c("N =", i))
+
+print(p)
+}
+```
+
+### Plotting regression intervals and contours
+$\mu$についての事後分布を確認する。  
+それぞれの体重（$x_{i}$）における$\mu$の事後分布をサンプリングする。
+```{r}
+sample <- rename(sample,alpha=b_Intercept, 
+                 beta = b_weight_c)
+
+xbar <- mean(d2$weight)
+
+# xi = 50におけるmuの事後分布からのサンプル
+mu_at_50 <- tibble(mu_50 = sample$alpha + sample$beta*(50-xbar))
+
+(qi <- mean_qi(mu_at_50, .width=.89))
+
+ggplot(mu_at_50,aes(x=mu_50))+
+  geom_histogram()
+
+# 全てのxiについてmuの事後分布を算出
+mu <- fitted(b4.3, summary=F)
+
+# 任意のxiについても作成できる
+weight_seq <- 
+  tibble(weight = 25:75) %>% 
+  mutate(weight_c = weight - mean(d2$weight))
+
+mu <- fitted(b4.3,
+             summary=F,
+             newdata = weight_seq) %>% 
+  data.frame() %>% 
+  set_names(25:75) %>% 
+  mutate(iter=1:4000) %>% 
+  pivot_longer(-iter, 
+               names_to = "weight",
+               values_to = "height") %>% 
+  mutate(weight = as.numeric(weight))
+  
+```
+<br />  
+
+全サンプルをグラフ上に表すと、以下のようになる。
+```{r}
+d2 %>% 
+  ggplot(aes(x=weight, y=height))+
+  geom_point(data=mu %>% filter(iter<101),
+             alpha=1/20, color="navyblue")+
+  coord_cartesian(xlim=c(30,60))+
+  theme(panel.grid=element_blank(),
+        aspect.ratio =1)
+
+```
+<br />  
+
+89%信用区間の作図をすると
+```{r}
+mu_fit <- 
+  fitted(b4.3,
+         newdata = weight_seq,
+         prob = c(.055, .5,.945)) %>% 
+  data.frame() %>% 
+   mutate(weight = 25:75)
+
+datatable(mu_fit)
+```
+
+
+```{r}
+d2 %>% 
+  ggplot(aes(x=weight,y=height))+
+  geom_point(color="navyblue", shape=1,size=3)+
+  geom_ribbon(data=mu_fit, 
+              aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+              fill='black', alpha=1/5)+
+  geom_line(data=mu_fit, aes(x=weight,y=Estimate),size=0.5)+
+  coord_cartesian(xlim=c(30,65))+
+  theme(panel.grid = element_blank(),
+        aspect.ratio =1)+
+  labs(title="89%信用区間")
+
+```
+<br />   
+
+### Prediction intervals   
+事後分布から、新たにデータをシミュレートする。
+```{r}
+pred <- 
+  predict(b4.3, 
+          newdata = weight_seq,
+          prob = c(0.055,0.5,0.945)) %>% 
+  data.frame() %>% 
+  bind_cols(weight_seq)
+
+# 作図
+d2 %>% 
+  ggplot(aes(x=weight,y=height))+
+  geom_point(color="navyblue", shape=1,size=3)+
+  geom_ribbon(data=pred, 
+              aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+              fill='black', alpha=1/8)+
+  geom_ribbon(data=mu_fit, 
+              aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+              fill='black', alpha=1/5)+
+  geom_line(data=pred, aes(x=weight,y=Estimate),size=0.5)+
+  coord_cartesian(xlim=c(30,65))+
+  theme(panel.grid = element_blank(),
+        aspect.ratio =1)+
+  labs(title="89%予測区間")
+```
+<br />  
+  
+## Curves from lines  
+多項回帰やB-スプラインによって曲線回帰する方法を学ぶ。 
+
+### Polynomial regression  
+クンサン属の18歳以下も含めた身長・体重データを見てみると、曲線を描いていることが分かる。
+```{r}
+(d)
+
+d %>% 
+  ggplot(aes(x=weight,y=height))+
+  geom_point(color="navyblue",size=3,shape=1,alpha=1/2)+ annotate(geom = "text",
+           x = 42, y = 115,
+           label = "This relation is\nvisibly curved.",
+           family = "Times")+
+  theme(panel.grid = element_blank(),
+        aspect.ratio=1)
+```
+<br />  
+
+そこで、$x^2$項を含めたモデリングを行う。  
+モデル式は以下の通り。  
+
+$h_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = \alpha + \beta_{1}x_{i} + \beta_{2}x^2_{i}$  
+$\alpha \sim Normal(178, 20)$  
+$\beta_{1} \sim LogNormal(0,1)$  
+$\beta_{2} \sim Normal(0,1)$  
+$\sigma \sim Uniform(0,50)$  
+
+標準化を施してからモデル化をする。  
+```{r}
+d <- 
+d %>% 
+  mutate(weight_s = scale(weight),
+         weight_s2 = weight_s^2)
+
+b4.5 <- 
+  brm(data = d,
+      family = gaussian,
+      height ~ 1 + weight_s + weight_s2,
+      prior = c(set_prior("normal(178, 20)",class="Intercept"),
+                set_prior("lognormal(0, 1)",class="b",
+                      coef = "weight_s"),
+                set_prior("normal(0, 1)", class = "b", 
+                      coef = "weight_s2"),
+                set_prior("", class = "sigma")),
+      iter = 10000, warmup = 9000, chains =4,seed=4,
+      backend = "cmdstanr",
+      file = "output/Chapter4/b4.5")
+
+plot(b4.5)
+summary(b4.5)
+```
+
+パラメータ間の相関はありそう。
+```{r}
+samples_b45 <- posterior_samples(b4.5)
+
+pairs(b4.5)
+
+bind_rows(mean_qi(samples_b45),
+      median_hdi(samples_b45)) %>% 
+  data.frame()
+
+samples_b45 %>% 
+  dplyr::select(-lp__) %>% 
+  cov() %>% 
+  round(digits=3)
+```
+<br />  
+
+信用区間と予測区間を作図する。  
+```{r}
+weight_seq <- 
+  tibble(weight_s = seq(from = -2.5, to = 2.5, length.out = 30)) %>% 
+  mutate(weight_s2 = weight_s^2)
+
+fit_b45 <- fitted(b4.5,
+  newdata = weight_seq,
+  prob =c(.055,0.5,.945)) %>% 
+  data.frame() %>% 
+  bind_cols(weight_seq)
+
+predict_b45 <- predict(b4.5,
+  newdata = weight_seq,
+  prob =c(.055,0.5,.945)) %>% 
+  data.frame() %>% 
+  bind_cols(weight_seq)
+
+  d %>% 
+    ggplot(aes(x=weight_s,y=height))+
+    geom_point(color="navyblue", shape=1,size=3,
+               alpha = 1/5)+
+    geom_ribbon(data=predict_b45, 
+                aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+                fill='black', alpha=1/8)+
+    geom_ribbon(data=fit_b45, 
+                aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+                fill='black', alpha=1/5)+
+    geom_line(data=predict_b45, aes(x=weight_s,y=Estimate),size=0.5)+
+    coord_cartesian(xlim=c(-2,2))+
+    theme(panel.grid = element_blank(),
+          aspect.ratio =1)+
+    labs(title="quadratic") ->p1
+
+p1
+```
+<br />  
+
+続いて、3乗項を含めたモデルを考えてみる。
+```{r}
+d <- 
+d %>% 
+  mutate(weight_s = scale(weight),
+         weight_s2 = weight_s^2,
+         weight_s3 = weight_s^3)
+
+b4.5_2 <- 
+  brm(data = d,
+      family = gaussian,
+      height ~ 1 + weight_s + weight_s2 + weight_s3,
+      prior = c(set_prior("normal(178, 20)",class="Intercept"),
+                set_prior("lognormal(0, 1)",class="b",
+                      coef = "weight_s"),
+                set_prior("normal(0, 1)", class = "b", 
+                      coef = "weight_s2"),
+                set_prior("normal(0, 1)", class = "b", 
+                      coef = "weight_s3"),
+                set_prior("", class = "sigma")),
+      iter = 10000, warmup = 9000, chains =4,seed=4,
+      backend = "cmdstanr",
+      file = "output/Chapter4/b4.5_2")
+
+plot(b4.5_2)
+summary(b4.5_2)
+```
+<br />  
+
+回帰曲線を描いてみる。
+```{r}
+weight_seq <- 
+  tibble(weight_s = seq(from = -2.5, to = 2.5, length.out = 30)) %>% 
+  mutate(weight_s2 = weight_s^2,
+         weight_s3 = weight_s^3)
+
+fit_b45_2 <- fitted(b4.5_2,
+  newdata = weight_seq,
+  prob =c(.055,0.5,.945)) %>% 
+  data.frame() %>% 
+  bind_cols(weight_seq)
+
+predict_b45_2 <- predict(b4.5_2,
+  newdata = weight_seq,
+  prob =c(.055,0.5,.945)) %>% 
+  data.frame() %>% 
+  bind_cols(weight_seq)
+
+  d %>% 
+    ggplot(aes(x=weight_s,y=height))+
+    geom_point(color="navyblue", shape=1,size=3,
+               alpha = 1/5)+
+    geom_ribbon(data=predict_b45_2, 
+                aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+                fill='black', alpha=1/8)+
+    geom_ribbon(data=fit_b45_2, 
+                aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+                fill='black', alpha=1/5)+
+    geom_line(data=predict_b45_2, aes(x=weight_s,y=Estimate),size=0.5)+
+    coord_cartesian(xlim=c(-2,2))+
+    theme(panel.grid = element_blank(),
+          aspect.ratio =1)+
+    labs(title="cubic") ->p2
+
+library(patchwork)
+p1|p2
+```
+3乗項を含んだ方が当てはまりは良くなるが、解釈は難しい。
+<br />
+
+### overthinking  
+元のスケールに戻すには？
+```{r}
+at <- c(-2, -1, 0, 1, 2)
+
+d %>% 
+    ggplot(aes(x=weight_s,y=height))+
+    geom_point(color="navyblue", shape=1,size=3,
+               alpha = 1/5)+
+    geom_ribbon(data=predict_b45_2, 
+                aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+                fill='black', alpha=1/8)+
+    geom_ribbon(data=fit_b45_2, 
+                aes(y=Q50, ymin=Q5.5, ymax=Q94.5), 
+                fill='black', alpha=1/5)+
+    geom_line(data=predict_b45_2, aes(x=weight_s,y=Estimate),size=0.5)+
+    coord_cartesian(xlim=c(-2,2))+
+    theme(panel.grid = element_blank(),
+          aspect.ratio =1)+
+  scale_x_continuous("元のスケールに変換",
+                     breaks = at,
+                     labels = round(at*sd(d$weight) + mean(d$weight), 1))
+```
+
+
+### Splines  
+サクラの開花データを用いて学習する。
+```{r}
+data("cherry_blossoms")
+
+d3 <- cherry_blossoms
+
+head(d3)
+```
+
+
+```{r}
+precis(d3, hist = FALSE)
+
+d3 %>% 
+  ggplot(aes(x=year, y=doy))+
+  geom_point(size=3,shape=1,color="#ffb7c5",
+             alpha=2/3)+
+  theme(panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#4f455c"))
+```
+<br />  
+
+ノットを15個とし、区間を16個に分割する。
+```{r}
+rm(cherry_blossoms)
+detach(package:rethinking, unload = T)
+
+# 欠損値を除く
+d4 <-
+  d3 %>% 
+  drop_na(doy)
+
+# knot数
+n_knots <- 15
+knot_list <- quantile(d4$year, 
+                      probs = seq(0,1,length.out=15))
+
+d4 %>% 
+  ggplot(aes(x = year, y = doy)) +
+  geom_vline(xintercept = knot_list, color = "white", alpha = 1/2) +
+  geom_point(color = "#ffb7c5", alpha = 1/2) +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "#4f455c"),
+        panel.grid = element_blank())
+
+```
+<br />  
+
+基底関数を求める。
+自由度は3（3次のスプライン回帰）。
+```{r}
+library(splines)
+B <- bs(d4$year,
+        knots = knot_list[-c(1,n_knots)],
+        degree=3,
+        intercept = TRUE)
+
+b <- 
+  B %>% 
+  data.frame() %>% 
+  set_names(str_c(0, 1:9), 10:17) %>%  
+  bind_cols(dplyr::select(d4, year)) %>% 
+  pivot_longer(-year,
+               names_to = "basis_function",
+               values_to = "basis")
+
+b %>% 
+  ggplot(aes(x=year,y=basis,group=basis_function))+
+  geom_line(color = "#ffb7c5", alpha = 1/2, size = 1.5)+
+  geom_vline(xintercept=knot_list, color = "white",
+             alpha=1/2)+
+  ylab("basis value")+
+  theme_bw()+
+  theme(panel.background = element_rect(fill = "#4f455c"),
+        panel.grid = element_blank(),
+         strip.background = element_rect(fill = scales::alpha("#ffb7c5", .25), color = "transparent"),
+        strip.text = element_text(size = 8, margin = margin(0.1, 0, 0.1, 0, "cm")))+
+  facet_wrap(~basis_function,ncol=1)
+```
+モデル式は以下を考える。
+<br />  
+
+$D_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = \alpha + \sum_{k=1}^K w_{k}B_{k,j}$  
+$\alpha \sim Normal(100, 10)$  
+$w_{j} \sim Normal(0, 10)$  
+$\sigma \sim Exponential(1)$  
+<br />  
+
+brmsでモデリングを行う。
+```{r}
+d5 <- 
+  d4 %>% 
+  mutate(B=B)
+
+glimpse(d5)  
+
+b4.8 <- 
+  brm(data = d5,
+      family = gaussian, 
+      doy ~ 1+B,
+      prior = c(prior(normal(100, 10), 
+                      class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4, 
+      cores = 4,
+      seed = 4,
+      backend = "cmdstanr",
+      file = "output/Chapter4/b4.8")
+
+summary(b4.8)
+plot(b4.8)
+
+samples_b48 <- posterior_samples(b4.8)  
+```
+<br />  
+
+それぞれの基底関数に重みづけしたものを作図してみる。 
+```{r}
+samples_b48 %>% 
+  dplyr::select(-lp__, -sigma,-b_Intercept,-lprior) %>% 
+  set_names(c(str_c(0,1:9),10:17)) %>% 
+  pivot_longer(1:17,
+               names_to = "basis_function",
+               values_to = "basis_value") ->  samples_b48
+
+samples_b48 %>% 
+  group_by(basis_function) %>% 
+  summarise(weight = mean(basis_value)) %>% 
+  full_join(b, by = "basis_function") -> post_mean
+
+post_mean %>% 
+  ggplot(aes(x=year, y = basis*weight, group=basis_function))+
+  geom_line(color = "#ffb7c5", alpha = 1/2, 
+            size = 1.5)+
+  geom_vline(xintercept = knot_list, color = "white",
+             alpha = 1/2)+
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "#4f455c"),
+        panel.grid = element_blank()) 
+```
+<br />  
+
+すべてを合計して信用区間付きで図示する。
+
+```{r}
+f_b48 <- fitted(b4.8, prob = c(0.015,0.5,0.985)) %>% 
+  data.frame() %>% 
+  bind_cols(d4)
+
+f_b48 %>% 
+  ggplot(aes(x=year, y = doy, 
+             ymin = Q1.5, ymax = Q98.5))+
+  geom_point(size=3, color = "#ffb7c5", alpha = 1/2)+
+  geom_vline(xintercept = knot_list, 
+             color = "white", alpha = 1/2)+
+  geom_hline(yintercept = fixef(b4.8)[1, 1], 
+             color = "white", linetype = 2)+
+  geom_ribbon(fill = "white", alpha = 2/3)+
+  labs(x = "year",
+       y = "day in year") +
+  theme_bw() +
+  theme(panel.background = element_rect(fill = "#4f455c"),
+        panel.grid = element_blank())
+  
+```
+<br />  
+  
+## Practice  
+### 4M1    
+> For the model definition below, simulate observed y values from the prior (not the posterior).  
+
+$$
+\begin{aligned}
+
+y_i &\sim Normal(\mu, \sigma)\\
+\mu &\sim Normal(0,10)\\
+\sigma &\sim Exponential(1)
+
+\end{aligned}
+
+$$
+
+```{r}
+n_sim <- 10000
+
+sim <- tibble(sigma_sim = rexp(n=n_sim, 1),
+              mu_sim = rnorm(n_sim, 0, 10),
+              y_sim = rnorm(n_sim, mu_sim,sigma_sim))
+```
+
+
+### 4M2  
+> Trasnlate the model just above into a brms formula.
+
+```{r}
+b4M2 <- brm(data = sim,
+    family = gaussian,
+    formula = y_sim ~ 1,
+    prior = c(prior(normal(0,10),class = Intercept),
+              prior(exponential(1), class = sigma)),
+    file = "output/Chapter4/b4M2", 
+    backend = "cmdstanr")  
+```
+
+### 4M4  
+> A sample of students is measured for height each year for 3 years. After the third year, you want to fit a linear regression predicting height using year as a predictor. Write down the mathematical model definition for this regression, using any variable names and priors you choose. Be prepared to defend your choice of priors.  
+
+$$
+\begin{aligned}
+
+h_{ij} &\sim Normal(\mu_{ij},\sigma)\\
+\mu_{ij} &\sim \alpha + \beta(y_j - \bar{y})\\
+\alpha &\sim Normal(100,10)\\
+\beta &\sim Normal(0,10)\\
+\sigma &\sim Exponential(1)  
+
+\end{aligned}
+
+$$
+
+身長は中央値なので，αは平均的な年（すなわち，2年目）の平均の身長を表す．身長はセンチメートルで測定され，標本はまだ成長過程にある子供たちであると仮定して，事前分布はNormal ( 100 , 10 ) を選んだ。 傾きは非常に曖昧である。ゼロを平均とし標準偏差を10とする事前分布は、成長（または縮小）の可能性の幅を表している。成長期には、身長の伸びは平均して6～13cm／年である。この標準偏差10は、成長速度が速い場合に予想される範囲を含んでいる。 最後に、σの指数事前分布は、平均0で標準偏差偏差を1と仮定している。事前の予測シミュレーションも、現在の仮定からすると、妥当な回帰直線を与えているように見える。
+  
+```{r}
+n <- 50
+tibble(group = seq_len(n),
+       alpha = rnorm(n, 100, 10),
+       beta = rnorm(n, 0, 10),
+       sigma = rexp(n, 1)) %>%
+  tidyr::expand(nesting(group, alpha, beta, sigma), year = c(1, 2, 3)) %>%
+  mutate(height = rnorm(n(), alpha + beta * (year - mean(year)), sigma)) %>%
+  ggplot(aes(x = year, y = height, group = group)) +
+  geom_line() +
+  labs(x = "Year", y = "Height")
+```
+
+### 4M5  
+> Now suppose I remind you that every student got taller each year. Does this information lead you to change your choice of priors? How?  
+
+年が増えると必ず身長も増加するので，βは正になることが分かっている．したがって，事前分布はこれを反映するように，例えば対数正規分布を用いるべきである。 
+この事前分布では，身長の伸びの期待値は年間約3cmになりえ，89％最高密度区間は年間0.87cmから5.18cmである。
+$$
+\beta ∼ logNormal(1,0.5)
+$$
+
+```{r}
+library(tidybayes)
+
+set.seed(123)
+samples <- rlnorm(1e8, 1, 0.5)
+bounds <- mean_hdi(samples, .width = 0.89)
+
+ggplot() +
+  stat_function(data = tibble(x = c(0, 10)), mapping = aes(x = x),
+                geom = "line", fun = dlnorm,
+                args = list(meanlog = 1, sdlog = 0.5)) +
+  geom_ribbon(data = tibble(x = seq(bounds$ymin, bounds$ymax, 0.01)),
+              aes(x = x, ymin = 0, ymax = dlnorm(x, 1, 0.5)),
+              alpha = 0.8) +
+  scale_x_continuous(breaks = seq(0, 10, 2)) +
+  labs(x = expression(beta), y = "Density")
+```
+
+対数正規事前分布を用いたもっともらしい直線の事前予測シミュレーションは、これらの事前分布が依然としてもっともらしい値を示していることを示している。ほとんどの線は、事前制約のために正である。しかし、平均値の周辺にばらつきがあるため、いくつかの線は低くなっている。もし、学生が身長を縮めることが本当に不可能であれば、このようなデータは測定誤差から生じるかもしれない。  
+
+```{r}
+n <- 50
+tibble(group = seq_len(n),
+       alpha = rnorm(n, 100, 10),
+       beta = rlnorm(n, 1, 0.5),
+       sigma = rexp(n, 1)) %>%
+  tidyr::expand(nesting(group, alpha, beta, sigma), year = c(1, 2, 3)) %>%
+  mutate(height = rnorm(n(), alpha + beta * (year - mean(year)), sigma)) %>% 
+  ggplot(aes(x = year, y = height, group = group)) +
+  geom_line() +
+  labs(x = "Year", y = "Height")
+```
+
+### 4M6  
+> Now suppose I tell you that the variance among heights for students of the same age is never more than 64cm. How does this lead you to revise your priors?  
+
+分散64cmは標準偏差8cmに相当する。現在の$\sigma \sim Exponential(1)$ の事前分布では、確率的に8より大きい値にはならない。しかし、理論的には可能である。もしこの方法で本当に分散を抑制したいのであれば、一様分布$Uniform(0,8)$を事前分布を使用することができます。これは、64cmより大きい分散をもたらすすべての値を排除することになる。    
+
+### 4M7  
+> Refit model m4.3 from the chapter, but omit the mean weight xbar this time. Compare the new model’s posterior to that of the original model. In particular, look at the covariance among the parameters. What is different? Then compare the posterior predictions of both models.  
+
+b4.3で中心化を行わなかったら...。
+結果はほとんど変わらない。
+```{r}
+b4.3_p <- 
+  brm(data = d2, 
+      family = gaussian,
+      height ~ 1 + weight,
+      prior = c(prior(normal(178, 20),clas =Intercept),
+                prior(lognormal(0, 1), class = b,lb=0),
+                prior(cauchy(0, 1), class = sigma)),
+      iter = 28000, warmup = 27000, chains = 4, 
+      cores = 4, seed = 4,
+      backend = "cmdstanr",
+      file="output/Chapter4/b4.3_p")
+```
+
+結果
+```{r}
+summary(b4.3)
+summary(b4.3_p)
+```
+
+共分散
+```{r}
+posterior_samples(b4.3) %>% 
+  data.frame() %>% 
+  dplyr::select(-lp__) %>% 
+  cov() %>% 
+  round(3)
+
+posterior_samples(b4.3_p) %>% 
+  data.frame() %>% 
+  dplyr::select(-lp__) %>% 
+  cov() %>% 
+  round(3)
+```
+<br />  
+
+事後分布から回帰直線と信用区間、予測区間を作図。
+```{r}
+weight_seq <- tibble(weight = seq(25,75,length.out=100)) %>% 
+  mutate(weight_c = weight - mean(d2$weight))
+
+fit <- bind_rows(
+  fitted(b4.3, newdata = weight_seq) %>%
+  data.frame() %>% 
+  bind_cols(weight_seq) %>% 
+  mutate(type = "Centered"),
+  fitted(b4.3_p, newdata = weight_seq) %>%
+  data.frame() %>% 
+  bind_cols(weight_seq) %>% 
+  mutate(type = "Non-centered")
+  )
+
+
+pred <- bind_rows(
+  predict(b4.3, newdata = weight_seq) %>%
+  data.frame() %>% 
+  bind_cols(weight_seq) %>% 
+  mutate(type = "Centered"),
+  predict(b4.3_p, newdata = weight_seq) %>%
+  data.frame() %>% 
+  bind_cols(weight_seq) %>% 
+  mutate(type = "Non-centered")
+  )
+
+d2 %>% 
+  ggplot(aes(x = weight, y = height))+
+  geom_point(alpha=2/3,shape=1,color="navyblue")+
+  geom_ribbon(data=pred, 
+              aes(y=Estimate,ymin = Q2.5, 
+                  ymax =Q97.5),
+              fill = "black", alpha = 1/5)+
+  geom_ribbon(data=fit, 
+              aes(y=Estimate,
+                  ymin = Q2.5, ymax =Q97.5),
+              fill = "black", alpha = 3/5)+
+  geom_line(data=pred, aes(x=weight, y= Estimate),
+            size=1.5)+
+  theme_bw()+
+  theme(legend.position = "bottom")+
+  facet_wrap(~type)
+
+```
+
+### 4M8  
+> In the chapter, we used 15 knots with the cherry blossom spline. Increase the number of knots and observe what happens to the resulting spline. Then adjust also the width of the prior on the weights—change the standard deviation of the prior and watch what happens. What do you think the combination of know number and the prior on the weights controls?  
+
+まず、この章のノット15個のSplineモデルをもう一度作成する。　　 
+
+```{r}
+library(splines)
+
+data(cherry_blossoms)
+cb_dat <- cherry_blossoms %>%
+  drop_na(doy)
+
+# original m4.7 model
+knots_15 <- quantile(cb_dat$year, probs = seq(0, 1, length.out = 15))
+B_15 <- bs(cb_dat$year, knots = knots_15[-c(1, 15)],
+           degree = 3, intercept = TRUE)
+
+cb_dat_15 <- cb_dat %>% 
+  mutate(B = B_15)
+
+b4M8 <- brm(doy ~ 1 + B, data = cb_dat_15, family = gaussian,
+            prior = c(prior(normal(100, 10), class = Intercept),
+                      prior(normal(0, 10), class = b),
+                      prior(exponential(1), class = sigma)),
+            iter = 2000, warmup = 1000, chains = 4, cores = 4, seed = 1234,
+            backend = "cmdstanr",
+            file = "output/Chapter4/b4M8")  
+```
+
+モデルの結果を可視化する。  
+```{r}
+original_draws <- cb_dat_15 %>% 
+  add_epred_draws(b4M8) %>% 
+  summarize(mean_hdi(.epred, .width = 0.89),
+            .groups = "drop")
+
+ggplot(original_draws, aes(x = year, y = doy)) +
+  geom_vline(xintercept = knots_15, alpha = 0.5) +
+  geom_hline(yintercept = fixef(b4M8)[1, 1], linetype = "dashed") +
+  geom_point(alpha = 0.5) +
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), fill = "#009FB7", alpha = 0.8) +
+  labs(x = "Year", y = "Day in Year")
+```
+
+次に2つ追加でモデリングする。一つは、ノット数を30にしたもの、もう一つは事前分布の標準偏差を狭くしたものである。  
+
+**30ノット**  
+```{r}
+knots_30 <- quantile(cb_dat$year, probs = seq(0, 1, length.out = 30))
+
+B_30 <- bs(cb_dat$year, knots = knots_30[-c(1, 30)],
+           degree = 3, intercept = TRUE)
+
+cb_dat_30 <- cb_dat %>% 
+  mutate(B = B_30)
+
+b4M8_b <- brm(doy ~ 1 + B, data = cb_dat_30, family = gaussian,
+               prior = c(prior(normal(100, 10), class = Intercept),
+                         prior(normal(0, 10), class = b),
+                         prior(exponential(1), class = sigma)),
+               iter = 2000, warmup = 1000, chains = 4, cores = 4, seed = 1234,
+               backend = "cmdstanr",
+               file = "output/Chapter4/b4M8_b")
+```
+
+**事前分布を狭く**
+```{r}
+b4M8_c <- brm(doy ~ 1 + B, data = cb_dat_30, family = gaussian,
+                prior = c(prior(normal(100, 10), class = Intercept),
+                          prior(normal(0, 2), class = b),
+                          prior(exponential(1), class = sigma)),
+                iter = 2000, warmup = 1000, chains = 4, cores = 4, seed = 1234,
+              backend = "cmdstanr",
+                file = "output/Chapter4/b4M8_c")
+```
+
+それぞれのモデルを可視化して比較する。ノット数を増やすとより回帰曲線がくねくねになる。また、事前分布の幅が狭くなると、事後分布の信用区間も狭くなる。   
+```{r, fig.dim = c(8,16)}
+spline_15 <- original_draws %>%
+  dplyr::select(-B) %>% 
+  mutate(knots = "15 knots (original model)")
+
+spline_30 <- cb_dat_30 %>% 
+  add_epred_draws(b4M8_b) %>% 
+  summarize(mean_hdi(.epred, .width = 0.89),
+            .groups = "drop") %>% 
+  dplyr::select(-B) %>% 
+  mutate(knots = "30 knots")
+
+spline_30p <- cb_dat_30 %>% 
+  add_epred_draws(b4M8_c) %>% 
+  summarize(mean_hdi(.epred, .width = 0.89),
+            .groups = "drop") %>% 
+  dplyr::select(-B) %>% 
+  mutate(knots = "30 knots; Tight prior")
+
+all_splines <- bind_rows(spline_15, spline_30, spline_30p)
+
+# make plot
+ggplot(all_splines, aes(x = year, y = doy)) +
+  geom_point(alpha = 0.5) +
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), fill = "#009FB7", alpha = 0.8) +
+  facet_wrap(~knots, ncol = 1) +
+  labs(x = "Year", y = "Day in Year")
+```
+
+### 4H1  
+> The weights listed below were recored in the !Kung census, but heights were not recorded for these individuals. Provide predicted heights and 89% intervals for each of these individuals. That is, fill in the table, below, using model-based predictions.   
+
+```{r, echo = FALSE}
+library(DT)
+
+tibble(individual = 1:5,
+       weight = c(46.95, 43.72, 64.78,
+                               32.59, 54.63)) %>% 
+  datatable()
+```
+
+
+```{r}
+weight_uk <- tibble(weight = c(46.95, 43.72, 64.78,
+                               32.59, 54.63)) %>% 
+          mutate(weight_c = weight - mean(d2$weight))
+
+predict(b4.3, newdata = weight_uk, prob=c(.055,.945)) 
+```
+
+### 4H2  
+> Select out all the rows in the Howell1 data with ages below 18 years of age. If you do it right, you should end up with a new data frame with 192 rows in it.  
+
+#### a  
+> Fit a linear regression to these data, using quap. Present and interpret the estimates. For every 10 units of increase in weight, how much taller does the model predict a child gets?  
+
+```{r}
+d_y <- d %>% 
+  filter(age < 18) %>% 
+  mutate(weight_c = weight - mean(weight))
+
+b4.3_y <- brm(
+  data =d_y,
+  family = gaussian,
+  formula = height ~ weight_c,
+  prior = c(prior(normal(150,20), class= "Intercept"),
+            prior(lognormal(0,1), class = "b"),
+            prior(exponential(1), class = "sigma")),
+  iter = 10000, warmup=9000, chains = 4,
+      backend = "cmdstanr",
+  file = "output/Chapter4/b4.3_y"
+)
+
+print(b4.3_y)
+print(b4.3)
+```
+
+#### b  
+> Plot the raw data, with height on the vertical axis and weight on the horizontal axis. Superimpose the MAP regression line and 89% interval for the mean. Also superimpose the 89% interval for predicted heights.  
+
+```{r}
+range(d_y$weight)
+
+seq_weighty <- tibble(weight = seq(0,50,length.out=100)) %>% 
+  mutate(weight_c = weight-mean(d_y$weight))
+
+predict_b42y <- predict(b4.3_y, newdata = seq_weighty,
+                      prob = c(.055,.5,.945)) %>% 
+  as_tibble() %>% 
+  bind_cols(seq_weighty)
+
+fit_b42y <- fitted(b4.3_y, newdata = seq_weighty,
+                      prob = c(.055,.5,.945)) %>% 
+  as_tibble() %>% 
+  bind_cols(seq_weighty)
+
+d_y %>% 
+  ggplot(aes(x=weight,y=height))+
+  geom_point(size=3,shape=1,alpha=1/2,
+             color="navyblue")+
+  geom_ribbon(data=fit_b42y,aes(y=Estimate,
+                                ymin=Q5.5,
+                                ymax=Q94.5),
+              fill = "black", alpha = 3/8)+
+  geom_ribbon(data=predict_b42y,aes(y=Estimate,
+                                ymin=Q5.5,
+                                ymax=Q94.5),
+              fill = "black", alpha = 3/8)+
+  geom_line(data=predict_b42y,aes(x=weight,y=Estimate),
+            size=0.5, color="black")+
+  coord_cartesian(xlim = c(0,50))+
+  labs(title = "below 18 years old")+
+  theme_bw()+
+  theme(aspect.ratio=1)
+
+```
+
+### 4H3  
+> Suppose a colleauge of yours, who works on allometry, glances at the practice problems just above. Your colleague exclaims, “That’s silly. Everyone knows that it’s only the logarithm of body weight that scales with height!” Let’s take your colleague’s advice and see what happens.  
+
+#### a  
+> Model the relationship between height (cm) and the natural logarithm of weight (log-kg). Use the entire Howell1 data frame, all 544 rows, adults and non-adults. Can you interpret the resulting estimates?  
+
+体重の自然対数をとってみる。  
+直線に近いように見える。
+```{r}
+d_log <- d %>% 
+  mutate(weight_log = log(weight))
+
+d_log %>% 
+  ggplot(aes(x=weight_log,y=height))+
+  geom_point()
+```
+<br />  
+
+モデリングする。
+```{r}
+b4.3_log <- brm(
+  data =d_log,
+  family = gaussian,
+  formula = height ~ weight_log,
+  prior = c(prior(normal(150,20), class= "Intercept"),
+            prior(lognormal(0,1), class = "b"),
+            prior(exponential(1), class = "sigma")),
+  iter = 10000, warmup=9000, chains = 4,
+  backend = "cmdstanr",
+  file = "output/Chapter4/b4.3_log"
+)
+
+print(b4.3_log)
+```
+
+#### b  
+> Begin with this plot: plot( height ~ weight , data = Howell1 ). Then use samples from the quadratic approximate posterior of the model in (a) to superimpose on the plot: (1) the predicted mean height as a function of weight, (2) the 97% interval for the mean, and (3) the 97% interval for predicted heights.  
+
+作図する。  
+```{r}
+range(d_log$weight)
+
+seq_weightl <- tibble(weight = seq(1,75,length.out=120)) %>% 
+  mutate(weight_log = log(weight))
+
+predict_b42l <-predict(b4.3_log,newdata = seq_weightl,
+                      prob = c(.015,.5,.985)) %>% 
+  as_tibble() %>% 
+  bind_cols(seq_weightl)
+
+fit_b42l <- fitted(b4.3_log, newdata = seq_weightl,
+                      prob = c(.015,.5,.985)) %>% 
+  as_tibble() %>% 
+  bind_cols(seq_weightl)
+
+d_log %>% 
+  ggplot(aes(x=weight,y=height))+
+  geom_point(size=1,alpha=1/2,
+             color="navyblue")+
+  geom_ribbon(data=fit_b42l,aes(y=Estimate,
+                                ymin=Q1.5,
+                                ymax=Q98.5),
+              fill = "black", alpha = 1/2)+
+  geom_ribbon(data=predict_b42l,aes(y=Estimate,
+                                ymin=Q1.5,
+                                ymax=Q98.5),
+              fill = "black", alpha = 1/6)+
+  geom_line(data=predict_b42l,aes(x=weight,y=Estimate),
+            size=0.5, color="black")+
+  coord_cartesian(xlim = c(0,50))+
+  labs(title = "using logarithm of weight")+
+  theme_bw()+
+  theme(aspect.ratio=1)
+```
+<br />  
+
+### 4H4  
+> Plot the prior predictive distribution for the parabolic polynomial regression model in the chapter. You can modify the code that plots the linear regression prior predictive distribution. Can you modify the prior distributions of $\alpha$, $\beta_1$, and $\beta_2$ so that the prior predictions stay within the biologically reasonable outcome space? That is to say: Do not try to fit the data by hand. But do try to keep the curves consistent with what you know about height and weight, before seeing these exact data.  
+
+教科書での多項式モデルは以下のように定義されている。  
+
+$$
+\begin{aligned}
+
+h_{i} &\sim Normal(\mu, \sigma)\\
+\mu_i &\sim \alpha + \beta_1 x_i + \beta_2x_i^2\\
+\alpha &\sim Normal(178,20)\\
+\beta_1 &\sim Log-Normal(0,1)\\
+\beta_2 &\sim Normal(0,1)\\
+\sigma &\sim Uniform(0,50)
+
+\end{aligned}
+$$
+
+このモデルでの事前分布からサンプリングを行って回帰曲線を描くと以下のようになる。明らかに、生態学的に妥当な範囲を超えてしまっている。    
+```{r}
+n <- 1000
+sim_x <- tibble(x = seq(25,75,length.out=100)) 
+
+param_prior <-   
+tibble(alpha = rnorm(n, 178,20),
+         beta_1 = rlnorm(n,0,1),
+         beta_2 = rnorm(n,0,1),
+         sigma = runif(n,0,50))
+
+sim <- crossing(sim_x,param_prior) %>% 
+  mutate(height = alpha + beta_1*x + beta_2*x^2,
+         group = rep(1:1000, times = 100))
+
+sim %>% 
+  ggplot(aes(x=x,y=height, group = group))+
+  geom_line(alpha= 0.1)+
+  geom_hline(yintercept = c(0, 272), linetype = 2:1, color = "red4") +
+  annotate(geom = "text", x = 25, y = 0, hjust = 0, vjust = 1,
+           label = "胚",
+           fontface = "bold") +
+  annotate(geom = "text", x = 25, y = 272, hjust = 0, vjust = 0,
+           label = "世界一身長が高い人 (272cm)",
+           fontface = "bold") +
+  coord_cartesian(ylim = c(-25, 300)) +
+  labs(x = "Weight", y = "Height")
+```
+<br/>  
+
+例えば以下のようなモデルにすると、生態学的に妥当な範囲に収まる。  
+
+$$
+\begin{aligned}
+
+h_{i} &\sim Normal(\mu, \sigma)\\
+\mu_i &\sim \alpha + \beta_1 x_i + \beta_2x_i^2\\
+\alpha &\sim Normal(-190,5)\\
+\beta_1 &\sim Log-Normal(13,0.2)\\
+\beta_2 &\sim Normal(-0.13,0.1)\\
+\sigma &\sim Uniform(0,50)
+
+\end{aligned}
+$$
+
+```{r}
+n <- 1000
+sim_x <- tibble(x = seq(25,75,length.out=100)) 
+
+param_prior <-   
+tibble(alpha = rnorm(n, -190, 5),
+       beta_1 = rnorm(n, 13, 0.2),
+       beta_2 = runif(n, -0.13, -0.1),
+         sigma = runif(n,0,50))
+
+sim <- crossing(sim_x,param_prior) %>% 
+  mutate(height = alpha + beta_1*x + beta_2*x^2,
+         group = rep(1:1000, times = 100))
+
+sim %>% 
+  ggplot(aes(x=x,y=height, group = group))+
+  geom_line(alpha= 0.1)+
+  geom_hline(yintercept = c(0, 272), linetype = 2:1, color = "red4") +
+  annotate(geom = "text", x = 25, y = 0, hjust = 0, vjust = 1,
+           label = "胚",
+           fontface = "bold") +
+  annotate(geom = "text", x = 25, y = 272, hjust = 0, vjust = 0,
+           label = "世界一身長が高い人 (272cm)",
+           fontface = "bold") +
+  coord_cartesian(ylim = c(-25, 300)) +
+  labs(x = "Weight", y = "Height")
+```
+<br/>  
+
+
+### 4H5  
+> Return to data(cherry_blossoms) and model the association between blossom date (doy) and March temperature (temp). Note that there are many missing values in both variables. You may consider a linear model, a polynomial, or a spline on temperature. How well does temperature trend predict the blossom trend?  
+
+cherry_blossomのデータで、気温と開花日の関係を線形モデル、多項回帰、スプライン回帰してみる。
+<br />  
+
+```{r}
+data("cherry_blossoms")
+
+cb_temp <- cherry_blossoms %>%
+  drop_na(doy, temp) %>%
+  mutate(temp_c = temp - mean(temp),
+         temp_s = temp_c / sd(temp),
+         temp_s2 = temp_s ^ 2,
+         temp_s3 = temp_s ^ 3)
+
+# 線形モデル
+lin_mod <- 
+  brm(doy ~ 1 + temp_c, 
+      data = cb_temp, 
+      family = gaussian,
+      prior = c(prior(normal(100,10),class=Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+               iter = 4000, warmup = 2000, 
+      chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+               file = ("output/Chapter4/lin_mod"))
+
+# 2項モデル
+qad_mod <- 
+  brm(doy ~ 1 + temp_s + temp_s2, 
+      data = cb_temp, family = gaussian,
+      prior= c(prior(normal(100, 10),class=Intercept),
+               prior(normal(0, 10), 
+                     class = b, coef = "temp_s"),
+               prior(normal(0, 1), 
+                     class = b, coef = "temp_s2"),
+               prior(exponential(1), class = sigma)),
+      iter = 4000, warmup = 2000, 
+      chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+               file = "output/Chapter4/qad_mod")
+
+# cubic model
+cub_mod <- 
+  brm(doy ~ 1 + temp_s + temp_s2 + temp_s3, 
+      data = cb_temp,family = gaussian,
+      prior = c(prior(normal(100,10),class=Intercept),
+              prior(normal(0, 10), 
+                    class = b, coef = "temp_s"),
+              prior(normal(0, 1), 
+                    class = b, coef = "temp_s2"),
+            　prior(normal(0, 1), 
+            　       class = b, coef = "temp_s3"),
+              prior(exponential(1), class = sigma)),
+    iter = 4000, warmup = 2000, 
+    chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+    file = "output/Chapter4/cub_mod")
+
+# spline model
+spl_mod <- 
+  brm(doy ~ 1 + s(temp, bs = "bs"), 
+  data = cb_temp, family = gaussian,
+  prior=c(prior(normal(100,10),class=Intercept),
+  prior(normal(0, 10), class = b),
+  prior(normal(0, 10), class = sds),
+  prior(exponential(1), class = sigma)),
+               iter = 2000, warmup = 1000, 
+               chains = 4, cores = 4, seed = 1234,
+               control = list(adapt_delta = 0.9999),
+               backend = "cmdstanr",
+               file = "output/Chapter4/spl_mod")
+```
+
+モデルの結果を作図すると以下のようになる。  
+```{r}
+library(modelr)
+
+grid <- cb_temp %>%
+  data_grid(temp = seq_range(temp, 100)) %>%
+  mutate(temp_c = temp - mean(cb_temp$temp),
+         temp_s = temp_c / sd(cb_temp$temp),
+         temp_s2 = temp_s ^ 2,
+         temp_s3 = temp_s ^ 3)
+
+fits <- bind_rows(
+  add_epred_draws(grid, lin_mod) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Linear"),
+  add_epred_draws(grid, qad_mod) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Quadratic"),
+  add_epred_draws(grid, cub_mod) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Cubic"),
+  add_epred_draws(grid, spl_mod) %>%
+    mean_qi(.width = c(0.67, 0.89, 0.97)) %>%
+    mutate(model = "Spline")
+) %>%
+  mutate(model = factor(model, levels = c("Linear", "Quadratic", "Cubic",
+                                          "Spline")))
+
+preds <- bind_rows(
+  add_predicted_draws(grid, lin_mod) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Linear"),
+  add_predicted_draws(grid, qad_mod) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Quadratic"),
+  add_predicted_draws(grid, cub_mod) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Cubic"),
+  add_predicted_draws(grid, spl_mod) %>%
+    mean_qi(.width = 0.89) %>%
+    mutate(model = "Spline")
+) %>%
+  mutate(model = factor(model, levels = c("Linear", "Quadratic", "Cubic",
+                                          "Spline")))
+
+ggplot(cb_temp, aes(x = temp)) +
+  facet_wrap(~model, nrow = 2) +
+  geom_point(aes(y = doy), alpha = 0.2) +
+  geom_ribbon(data = preds, aes(ymin = .lower, ymax = .upper),
+              alpha = 0.2) +
+  geom_lineribbon(data = fits, aes(y = .epred, ymin = .lower, ymax = .upper),
+                  size = .6) +
+  scale_fill_brewer(palette = "Blues", breaks = c(0.67, 0.89, 0.97)) +
+  labs(x = "March Temperature", y = "Day in Year") +
+  theme(legend.position = "bottom")
+```
+
+### 4H6  
+> Simulate the prior predictive distribution for the cherry blossom spline in the chapter. Adjust the prior on the weights and observe what happens. What do you think the prior on the weights is doing?  
+
+```{r}
+cb_dat <- cherry_blossoms %>%
+  drop_na(doy)
+
+knot_list <- quantile(cb_dat$year, probs = seq(0, 1, length.out = 15))
+
+B <- bs(cb_dat$year,
+        knots = knot_list[-c(1, 15)],
+        degree = 3, intercept = TRUE)
+```
+
+教科書のモデルから事前予測分布を描画すると以下のようになる。  
+```{r}
+n <- 50
+
+tibble(.draw = seq_len(n),
+       alpha = rnorm(n, 100, 10),
+       w = purrr::map(seq_len(n),
+                      function(x, knots) {
+                        w <- rnorm(n = knots + 2, 0, 10)
+                        return(w)
+                      },
+                      knots = 15)) %>%
+  mutate(mu = map2(alpha, w,
+                   function(alpha, w, b) {
+                     res <- b %*% w
+                     res <- res + alpha
+                     res <- res %>%
+                       as_tibble(.name_repair = ~".value") %>%
+                       mutate(year = cb_dat$year, .before = 1)
+                     return(res)
+                   },
+                   b = B)) %>%
+  unnest(cols = mu) %>%
+  ggplot(aes(x = year, y = .value)) +
+  geom_vline(xintercept = knot_list, alpha = 0.5) +
+  geom_line(aes(group = .draw)) +
+  expand_limits(y = c(60, 140)) +
+  labs(x = "Year", y = "Day in Year")
+```
+
+ここで、４M８でやったように`w`の事前分布を$Normal(0,2)$にする。すると、うねうねが小さくなる。  
+```{r}
+n <- 50
+tibble(.draw = seq_len(n),
+       alpha = rnorm(n, 100, 10),
+       w = purrr::map(seq_len(n),
+                      function(x, knots) {
+                        w <- rnorm(n = knots + 2, 0, 1)
+                        return(w)
+                      },
+                      knots = 15)) %>%
+  mutate(mu = map2(alpha, w,
+                   function(alpha, w, b) {
+                     res <- b %*% w
+                     res <- res + alpha
+                     res <- res %>%
+                       as_tibble(.name_repair = ~".value") %>%
+                       mutate(year = cb_dat$year, .before = 1)
+                     return(res)
+                   },
+                   b = B)) %>%
+  unnest(cols = mu) %>%
+  ggplot(aes(x = year, y = .value)) +
+  geom_vline(xintercept = knot_list, alpha = 0.5) +
+  geom_line(aes(group = .draw)) +
+  expand_limits(y = c(60, 140)) +
+  labs(x = "Year", y = "Day in Year")
+```
+

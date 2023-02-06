@@ -1,0 +1,1388 @@
+# The Haunted DAG & the Causal Terror 
+**Preface**  
+合流点を固定してしまうと、あるいは合流点の値で選抜を行ってしまうと、疑相関が生じてしまう。  
+例えば、交付金申請に通った研究内のみで「研究の信頼性」と「研究の話題性」の相関を調べる場合。
+本来それらには相関がなくても、申請に通った研究（両者の合計点が高い研究）のみに絞ると、負の相関が生じる。
+
+<br />  
+
+```{r}
+theme_set(theme_classic())
+
+set.seed(200)
+n <- 500 # number of proposal
+p <- 0.1 # prop to select
+
+d <- tibble(newsworthiness = rnorm(n),
+            trustworthiness = rnorm(n))
+
+d %>% 
+  ggplot(aes(x=newsworthiness,y=trustworthiness))+
+  geom_point()+
+  theme(aspect.ratio=1)+
+  geom_smooth(method = "lm", color = "black")
+```
+
+<br />  
+
+合計点が上位10%のみの研究に絞ると...。  
+
+```{r}
+d %>% 
+  mutate(total = trustworthiness + newsworthiness) %>% 
+  mutate(selected = ifelse(total >= quantile(total, 1-p), TRUE, FALSE)) -> d
+
+head(d)
+
+text <-
+  tibble(newsworthiness  = c(2, 1), 
+         trustworthiness = c(2.25, -2.5),
+         selected = c(TRUE, FALSE),
+         label    = c("selected", "rejected"))
+
+
+d %>%  
+  ggplot(aes(x = newsworthiness, y=trustworthiness,
+             color = selected))+
+  geom_point(aes(shape = selected), alpha =3/4)+
+  geom_text(data = text,
+            aes(label = label))+
+  scale_shape_manual(values=c(1,19))+
+  scale_color_manual(values=c("black", "navyblue"))+
+  geom_smooth(data = . %>% filter(selected == "TRUE"),
+              method = "lm", color = "navyblue",
+              se = F, size = 1/2, fullrange = T)+
+  theme(legend.position = "none",
+        aspect.ratio=1)
+```
+<br />  
+
+本章では、回帰モデルを使用する際にどの変数を加えるべきで、どの変数を加えるべきでないかを検討する。  
+
+<br />  
+
+## Multicollinearity  
+両脚の長さから身長を予測するモデルを考える。  
+```{r}
+set.seed(909)
+n <- 100
+
+d <- tibble(height = rnorm(n, 10, 2),
+            leg_prop = runif(n, 0.4, 0.5)) %>% 
+     mutate(leg_left = leg_prop*height +
+              rnorm(n,0,0.02),
+            leg_right = leg_prop*height + 
+              rnorm(n, 0, 0.02))
+```
+<br />  
+
+当然、左右の脚の長さ同士は強く相関するし、どちらも身長と強く相関する。  
+
+```{r}
+d %>% 
+  dplyr::select(-leg_prop) %>% 
+  cor()
+
+d %>% 
+  ggplot(aes(x=leg_left, y=leg_right))+
+  geom_point()+
+  theme(aspect.ratio=1)-> p1
+
+d %>% 
+  ggplot(aes(x=leg_left, y=height))+
+  geom_point()+
+  theme(aspect.ratio=1) -> p2
+
+d %>% 
+  ggplot(aes(x=leg_right, y=height))+
+  geom_point()+
+  theme(aspect.ratio=1) -> p3
+
+p1+p2+p3
+```
+
+<br />  
+
+そこで、モデルを回してみると...。  
+どちらも身長にほとんど影響していないように見えるし、両脚が異なる影響を与えているような推定結果になってしまう。  
+```{r}
+b6.1 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = height ~ 1 + leg_left + leg_right,
+      prior = c(prior(normal(10,100),class=Intercept),
+                prior(normal(2,10),class=b),
+                prior(exponential(1),class = sigma)),
+      iter=2000,warmup=1000,chains=4,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.1")
+
+posterior_summary(b6.1) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_samples(b6.1) %>% 
+  dplyr::select(-lp__) %>% 
+  mcmc_intervals()
+```
+
+<br />  
+
+繰り返しやってみる。
+推定結果にかなりばらつきが出る。
+```{r}
+sim_and_fit <- function(seed, n = 100) {
+  n <- n
+  set.seed(seed)
+  d <- 
+    tibble(height   = rnorm(n, mean = 10, sd = 2),
+           leg_prop = runif(n, min = 0.4, max = 0.5)) %>% 
+    mutate(leg_left  = leg_prop * height + rnorm(n, mean = 0, sd = 0.02),
+           leg_right = leg_prop * height + rnorm(n, mean = 0, sd = 0.02))
+  fit <- update(b6.1, newdata = d) 
+}
+
+#sim <-
+ # tibble(seed = 1:4) %>% 
+  #mutate(post = purrr::map(seed, ~sim_and_fit(.) %>% 
+   #                   posterior_samples()))
+
+sim <- readRDS("output/Chapter6/sim.rds")
+
+sim %>% 
+  unnest(post) %>%
+  pivot_longer(b_Intercept:sigma) %>% 
+  mutate(seed = str_c("seed ", seed)) %>% 
+  ggplot(aes(x = value, y = name)) +
+  stat_pointinterval(.width = .95, color = "forestgreen") +
+  labs(x = "posterior", y = NULL) +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.border = element_rect(color = "black", fill = "transparent"),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) +
+  facet_wrap(~ seed, ncol = 1)
+```
+
+<br />  
+
+両脚の係数は強く相関する。  
+```{r}
+posterior_samples(b6.1) %>% 
+  dplyr::select(b_leg_right,b_leg_left) %>% 
+  ggplot(aes(x=b_leg_right,y=b_leg_left))+
+  geom_point()
+```
+  
+<br />  
+
+また、両者の合計はおおよそどちらか一つの変数のみを説明変数に入れたときの係数(2程度)と一致する。
+```{r}
+posterior_samples(b6.1) %>% 
+  mutate(sum_b = b_leg_left+b_leg_right) %>% 
+  dplyr::select(sum_b) %>%
+  ggplot(aes(x=sum_b))+
+  geom_histogram()
+```
+
+<br />  
+
+これは、左右の脚の長さが強く相関しているため、モデルが以下の式のように近似できると考えると上手く説明できる。  
+
+$
+\begin{aligned}
+y_{i} &\sim Normal(\mu_{i}, \sigma)\\
+\mu_{i} &= \alpha + (\beta_{1} + \beta_{2})x_{i}
+\end{aligned}
+$
+
+```{r}
+b6.1_2 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = height ~ 1 + leg_right,
+      prior = c(prior(normal(10,100),class=Intercept),
+                prior(normal(2,10),class=b),
+                prior(exponential(1),class = sigma)),
+      iter=2000,warmup=1000,chains=4,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.1_2")
+
+posterior_summary(b6.1_2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />   
+
+### Multicollinear milk
+霊長類の母乳のデータを用いて考える。  
+脂肪分の割合（F）とラクトースの割合（L）でカロリー（K）を予測することを考える。  
+FとLは強く負に相関する。
+```{r}
+data(milk)
+d2 <- milk %>% 
+  mutate(K = standardize(kcal.per.g),
+         F = standardize(perc.fat),
+         L = standardize(perc.lactose))
+head(d2)
+
+d2 %>% 
+  dplyr::select(F,K,L) %>% 
+  pairs()
+
+library(GGally)
+ggpairs(data = d2, columns = 9:11)
+```
+<br />  
+
+それぞれの変数でモデリングしてみる。  
+
+```{r}
+b6.2_F <- 
+  brm(data = d2,
+      family = gaussian,
+      formula = K ~ 1 + F,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      iter=4000, warmup = 3000, chains=4,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.2_F")
+
+b6.2_L <- 
+  brm(data = d2,
+      family = gaussian,
+      formula = K ~ 1 + L,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      iter=4000, warmup = 3000, chains=4,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.2_L")
+
+
+posterior_summary(b6.2_F) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_summary(b6.2_L) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+<br />  
+
+次に、両方の変数を説明変数に入れてモデリング。係数が変化しており、ばらつきも大きくなっている。  
+```{r}
+b6.2_LF <- 
+  brm(data = d2,
+      family = gaussian,
+      formula = K ~ 1 + L + F,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      iter=4000, warmup = 3000, chains=4,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.2_LF")
+
+posterior_summary(b6.2_LF) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_summary(b6.2_LF) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />  
+
+およらく、データには以下のような因果関係がある。
+```{r}
+library(ggdag)
+
+dag_coords <-
+  tibble(name = c("L", "D", "F", "K"),
+         x    = c(1, 2, 3, 2),
+         y    = c(2, 2, 2, 1))
+
+dagify(L ~ D,
+       F ~ D,
+       K ~ L + F,
+       coords = dag_coords) %>%
+  
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(aes(color = name == "D"),
+                 alpha = 1/2, size = 6.5, show.legend = F) +
+  geom_point(x = 2, y = 2, 
+             size = 6.5, shape = 1, stroke = 1, color = "orange") +
+  geom_dag_text(color = "black") +
+  geom_dag_edges() +
+  scale_color_manual(values = c("steelblue", "orange")) +
+  scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1))
+```
+
+
+```{r, echo = FALSE}
+gg_fancy_dag <- function(d, x = 1, y = 1, circle = "U") {
+  
+  d %>% 
+    ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+    geom_dag_point(aes(color = name == circle),
+                   alpha = 1/2, size = 6.5, show.legend = F) +
+    geom_point(x = x, y = y, 
+               size = 6.5, shape = 1, stroke = 1, color = "orange") +
+    geom_dag_text(color = "black") +
+    geom_dag_edges() + 
+    scale_color_manual(values = c("steelblue", "orange")) +
+    theme_dag()
+  
+}
+```
+
+<br />  
+
+## Post-treatment bias  
+土中の真菌に対する処置を行った場合に植物の成長が早くなるかを検討する。  
+ここでは、処置前の植物の高さ(h0)、処置の有無(T)、処置後の真菌の量(F)、処置後の植物の高さ(h1)を考える。どの変数をモデルに含めるべきだろうか?  
+もし処置の結果を知りたいのであれば、Fを説明変数に入れてはいけない。それはpost-treatment effectだからである。  
+
+```{r}
+set.seed(71)
+n <- 100
+
+d3 <- tibble(
+  h0 = rnorm(n, 10,2),
+  T = rep(0:1,each=n/2),
+  F = rbinom(n, size = 1, prob = .5 - T*0.4),
+  h1 = h0 + rnorm(n, mean = 5-3*F, sd=1))
+
+d3 %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  mean_qi(.width = .89) %>% 
+  mutate_if(is.double, round, digits = 2)
+```
+  
+まず、処置前の高さのみを入れた以下のモデルを考える。  
+このとき、$p$は必ず0以上になるので、事前分布として対数正規分布を用いる。  
+  
+$h_{1,i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = h_{0,i}×p$  
+$p \sim Lognormal(0, 0.25)$  
+$\sigma \sim Exponential(1)$  
+
+<br />  
+
+推定結果は以下の通り。  
+40%強の成長が見込まれる。  
+```{r}
+b6.3_h <- 
+  brm(data=d3,
+      family = gaussian,
+      formula = h1 ~ 0 + h0,
+       prior = c(prior(lognormal(0, 0.25),class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.3_h")
+
+posterior_summary(b6.3_h) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />  
+
+続いて、処置の有無(T)と処置後の真菌の有無(F)もいれた以下のモデルを考える。  
+<br />  
+
+$h_{1,i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = h_{0,i}×p$  
+$p = \alpha + \beta_{T}T_{i} + \beta_{F}F_{i}$  
+$\alpha \sim Lognormal(0, 0.25)$
+$\beta \sim Normal(0, 0.5)$  
+$\sigma \sim Exponential(1)$  
+
+<br />  
+
+結果、処置の結果が0に近いと推定される。  
+```{r}
+
+b6.3_htf <- 
+  brm(
+    data = d3,
+    family = gaussian,
+      formula = bf(h1 ~ h0*(a + t*T + f*F),
+                   a+t+f ~ 1,
+                   nl = TRUE),
+      prior=c(prior(lognormal(0,0.2),nlpar = a,lb = 0),
+                prior(normal(0, 0.5), nlpar = t),
+                prior(normal(0, 0.5), nlpar = f),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed=6,
+    backend = "cmdstanr",
+      file = "output/Chapter6/b6.3_htf"
+  )
+
+posterior_summary(b6.3_htf) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+  
+pairs(b6.3_htf)
+```
+
+### Blocked by consequence  
+これは、処置後の真菌を入れたことによって、T -> h1へのパスがブロックされたからである。（**h1とTについてバックドア基準を満たさない**）  
+よって、Fを除外してモデリングする必要がある。
+```{r}
+b6.3_ht <- 
+  brm(
+    data = d3,
+    family = gaussian,
+      formula = bf(h1 ~ h0*(a + t*T),
+                   a+t ~ 1,
+                   nl = TRUE),
+      prior=c(prior(lognormal(0,0.2),nlpar = a,lb = 0),
+                prior(normal(0, 0.5), nlpar = t),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,
+      seed =6,
+    backend = "cmdstanr",
+      file = "output/Chapter6/b6.3_ht"
+  )
+
+posterior_summary(b6.3_ht) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />    
+
+### Fungus and d-separation
+DAGを用いて考えてみる。  
+```{r}
+dag_coords <-
+  tibble(name = c("H0", "T", "F", "H1"),
+         x    = c(1, 5, 4, 3),
+         y    = c(2, 2, 1.5, 1))
+
+dag <-
+  dagify(F ~ T,
+         H1 ~ H0 + F,
+         coords = dag_coords)
+```
+
+
+```{r, echo = FALSE}
+gg_simple_dag <- function(d) {
+  
+  d %>% 
+    ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+    geom_dag_point(color = "steelblue", alpha = 1/2, size = 6.5) +
+    geom_dag_text(color = "black") +
+    geom_dag_edges() + 
+    theme_dag()
+  
+}
+
+dag %>% 
+  gg_simple_dag()
+```
+<br />  
+
+上記の因果モデルにおいて、条件付き独立を求めると、Fで条件づけたときにH1とTが独立になってしまうことが分かる。  
+このとき、H1とTはFで条件づけたときに**d分離している**という。
+```{r}
+impliedConditionalIndependencies(dag)
+```
+<br />  
+
+続いて、以下のような因果モデルを考える。  
+このモデルでは、H0と水分(M、非観測変数)のみがH1に影響を与え、MとTがFに影響を与えるとする。このとき,
+Tだけを説明変数に入れてもH1との関連は見られないが、Fを入れるとTとH1に関連がみられる。  
+
+```{r}
+dag_coords <-
+  tibble(name = c("H0", "H1", "M", "F", "T"),
+         x    = c(1, 2, 2.5, 3, 4),
+         y    = c(2, 2, 1, 2, 2))
+
+# save our DAG
+dag <-
+  dagify(F ~ M + T,
+         H1 ~ H0 + M,
+         coords = dag_coords)
+
+dag %>%
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(aes(color = name == "M"),
+                 alpha = 1/2, size = 6.5, show.legend = F) +
+  geom_point(x = 2.5, y = 1, 
+             size = 6.5, shape = 1, stroke = 1, color = "orange") +
+  geom_dag_text(color = "black") +
+  geom_dag_edges() + 
+  scale_color_manual(values = c("steelblue", "orange")) +
+  theme_dag()
+
+```
+
+```{r}
+set.seed(71)
+n <- 1000
+
+d4 <- tibble(
+  h0 = rnorm(n, 10,2),
+  T = rep(0:1, each = n/2),
+  M = rbern(n),
+  F = rbinom(n, size=1, prob = 0.5-T*0.4+0.4*M),
+  h1 = h0 + rnorm(n, mean =5 + 3*M, sd=1)
+)
+
+head(d4)
+```
+
+```{r}
+b6.3_ht2 <- 
+  update(b6.3_ht,
+         newdata = d4,
+         seed =6,
+         file = "output/Chapter6/b6.3_ht2")
+
+b6.3_htf2 <- 
+  update(b6.3_htf,
+         newdata = d4,
+         seed =6,
+         file = "output/Chapter6/b6.3_htf2")
+
+
+posterior_summary(b6.3_ht2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_summary(b6.3_htf2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+<br />  
+
+これはなぜだろうか？  
+次節でこの問題を見ていく。
+
+<br />  
+
+## Collider bias  
+再び、本章冒頭の例を考える。  
+DAGは以下のようになる。
+```{r}
+dag_coords <-
+  tibble(name = c("T", "S", "N"),
+         x    = c(1, 2, 3),
+         y    = c(2, 1, 2))
+
+dag <- dagify(S ~ T,
+       S ~ N,
+       coords = dag_coords)
+
+gg_simple_dag(dag)
+```
+
+このとき、Sについて条件づけると、TとNの間に疑似相関が生じてしまう。  
+
+### Collider of false sorrow  
+年齢(A)が幸福(H)にどう影響するかを検討したいとする。   
+ここでは、幸せは生まれた瞬間に決定し、年齢とは関係ないと仮定する。一方で、年齢と幸福が結婚(M)に影響を与えるとする。  
+DAGは以下の通り。  
+```{r}
+dag_coords <-
+  tibble(name = c("H", "M", "A"),
+         x    = c(1, 2, 3),
+         y    = c(2, 1, 2))
+
+dag <- dagify(M ~ H,
+       M ~ A,
+       coords = dag_coords)
+
+gg_simple_dag(dag)
+
+```
+
+シミュレーションをする。  
+```{r}
+d5 <- sim_happiness(seed = 1977, N_years = 1000)
+
+posterior_summary(d5) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+d5 %>% 
+  ggplot(aes(x = age, y = happiness, fill= as.factor(married)))+
+  geom_point(size=2.3, shape=21, color = "black") +
+  scale_fill_manual(values = c("white","blue"))+
+  theme_bw()+
+  theme(legend.position = "none")
+
+```
+
+<br />  
+
+まず、以下のモデルを考え、結婚状態をコントロールうえで年齢が幸福度に与える影響を考える。  
+
+<br />  
+
+$\mu_{i} = \alpha_{MID[i]} + \beta_{A}A_{i}$  
+
+```{r}
+d5 %>% 
+  filter(age >17) %>% 
+  mutate(A = (age-18)/(65-18)) %>% 
+  mutate(M = factor(married + 1, labels = c("single", "married"))) -> d6
+
+```
+
+<br />  
+
+モデルを回すと、年齢が幸福と負に関連していることになる。　　
+```{r}
+b6.4 <- 
+  brm(data = d6,
+      family = gaussian,
+      formula = happiness ~0 +  M + A,
+      prior = c(prior(normal(0,1),class = b, 
+                      coef=Mmarried),
+                prior(normal(0,1),class = b,
+                      coef = Msingle),
+                prior(normal(0,2),class = b,
+                      coef = A),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup=1000,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.4")
+
+posterior_summary(b6.4) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />  
+
+一方で、年齢のみを説明変数に入れると、年齢の影響はなくなる。  
+つまり、結婚の有無を変数に入れたことによって年齢と幸福度の間に疑似相関が生じていた。  
+```{r}
+b6.4_2 <- 
+  brm(data = d6,
+      family = gaussian,
+      formula = happiness ~1 + A,
+      prior = c(prior(normal(0,1),class = b),
+                prior(normal(0,2),class = Intercept),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup=1000,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6.4_2")
+
+posterior_summary(b6.4_2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />  
+
+### The haunted DAG  
+以下の例を考える。  
+両親(P)と祖父母(G)が子どもの学業成績(C)に直接影響を与えているが、GはPを通してもCに影響を与えているとする。  
+また、未観測の変数(U)がPとCに影響を与えているとする。
+
+```{r}
+dag_coords <-
+  tibble(name = c("G", "P", "C", "U"),
+         x    = c(1, 2, 2, 2.5),
+         y    = c(2, 2, 1, 1.5))
+
+dag <-
+  dagify(C ~ G + P + U,
+         P ~ G + U,
+         coords = dag_coords)
+
+gg_fancy_dag(dag, x=2.5,y=1.5,circle = "U")
+
+```
+  
+<br />  
+
+以下のようにシミュレーションする。  
+ここで、GがCに直接与える影響は0と仮定する。  
+```{r}
+n <- 200
+
+b_GC <- 0
+b_GP <- 1
+b_PC <- 1
+b_U <- 2
+
+set.seed(1)
+
+d7 <- tibble(
+  U = 2*rbern(n, 0.5)-1,
+  G = rnorm(n),
+  P = rnorm(n, b_GP*G + b_U*U,sd=1),
+  C = rnorm(n, b_PC*P + b_U*U + b_GC*G,sd=1)
+)
+
+head(d7)
+ggpairs(d7)
+```
+
+<br />  
+
+C ~ G + Pのモデリングを行うと...。  
+Pの影響が2倍近くになっており、Gが負の影響を与えているという結果になってしまっている。  
+```{r}
+b6.5 <- 
+  brm(data = d7,
+      family = gaussian,
+      formula = C ~ 0 + Intercept+P+G,
+      prior = c(prior(normal(0,1),class = b),
+                prior(exponential(1),class=sigma)),
+      backend = "cmdstanr",
+      seed =6, file = "output/Chapter6/b6.5")
+
+posterior_summary(b6.5) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+```
+<br />  
+
+これは、Pを固定（例えば40-60%のものにデータを限定）してみるとよくわかる。  
+Pを固定したとき、Gが低ければUは高くなるし、Gが高ければUは低くなる（U -> P <- Gなので）。そして、Uが高いほどはCも高いので、結果的にGが低いほどCも高いという結果が得られることになる。    
+
+```{r}
+d7 %>% 
+  mutate(C = standardize(C), G = standardize(G)) %>% 
+  mutate(P40_60 = ifelse(P < quantile(P,probs = .6)& P > quantile(P, probs = .4), TRUE,FALSE)) %>% 
+  ggplot(aes(x=G, y=C))+
+  geom_point(aes(shape = as.factor(P40_60),
+                 color = as.factor(U)),
+             size=3.5, stroke=3/4)+
+  scale_color_manual(values =
+                  c("black","navy"))+
+  scale_shape_manual(values =c(1,19))+
+  geom_smooth(data = . %>% filter(P40_60=="TRUE"),
+              method = "lm", se = FALSE, fullrange=T,
+              color = "black", size=1/2)+
+  labs(x="granpa education (G)", 
+       y = "grandchild eduaction (C)",
+       title = "Parents in 45th and 60th centiles")+
+  theme(aspect.ratio=1,
+        legend.position = "none")+
+  annotate(geom="text", x=-2,y=2,label="U = 1",
+           color = "navy")+
+    annotate(geom="text", x=2,y=-2,label="U = -1",
+           color = "black")
+  
+```
+
+<br />  
+
+ここで、Uが観測できたとしてモデリングを行うと、Gの効果はなくなり、Pの効果も正しく推定できるようになる。　　
+
+```{r}
+b6.5_2 <- 
+  brm(data = d7,
+      family = gaussian,
+      formula = C ~ 0 + Intercept+P+G+U,
+      prior = c(prior(normal(0,1),class = b),
+                prior(exponential(1),class=sigma)),
+      backend = "cmdstanr",
+      seed =6, file = "output/Chapter6/b6.5_2")
+
+posterior_summary(b6.5_2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+```
+
+<br />  
+
+## Confronting confoundings  
+上記のように、モデルに入れる変数を身長に選ばなければ交絡が生じてしまう。  
+ゆえに、**バックドア基準**を満たすような変数を入れることが肝要である。  
+
+<br />  
+
+因果モデルはどんなに複雑であろうと、以下の4つの関係の組み合わせからなる。  
+
+(1) The fork  
+Zで条件づけられれば、XとYは独立になる。  
+<br />  
+
+(2) The Pipe  
+Zで条件づけるとXからYへのパスがふさがれてしまう。  
+<br />  
+
+(3) The Collider  
+Zで条件づけると、XとYの間に疑似相関が生じてしまう。  
+<br />  
+
+(4) The Descendant  
+Dで条件づけるとZも部分的に条件づけられてしまうため、XとYの間に疑似相関が生じてしまう。  
+
+<br />
+```{r, echo = FALSE}
+d1 <- 
+  dagify(X ~ Z,
+         Y ~ Z,
+         coords = tibble(name = c("X", "Y", "Z"),
+                         x = c(1, 3, 2),
+                         y = c(2, 2, 1)))
+
+d2 <- 
+  dagify(Z ~ X,
+         Y ~ Z,
+         coords = tibble(name = c("X", "Y", "Z"),
+                         x = c(1, 3, 2),
+                         y = c(2, 1, 1.5)))
+
+d3 <- 
+  dagify(Z ~ X + Y,
+         coords = tibble(name = c("X", "Y", "Z"),
+                         x = c(1, 3, 2),
+                         y = c(1, 1, 2)))
+
+d4 <- 
+  dagify(Z ~ X + Y,
+         D ~ Z,
+         coords = tibble(name = c("X", "Y", "Z", "D"),
+                         x = c(1, 3, 2, 2),
+                         y = c(1, 1, 2, 1.05)))
+
+p1 <- gg_simple_dag(d1) + labs(subtitle = "The Fork")
+p2 <- gg_simple_dag(d2) + labs(subtitle = "The Pipe")
+p3 <- gg_simple_dag(d3) + labs(subtitle = "The Collider")
+p4 <- gg_simple_dag(d4) + labs(subtitle = "The Descendant")
+
+(p1 | p2 | p3 | p4) &
+  theme(plot.subtitle = element_text(hjust = 0.5)) &
+  plot_annotation(title = "The four elemental confounds") 
+```
+
+<br />  
+
+### Two roads  
+以下のDAGを考える。  
+
+```{r, echo = FALSE}
+dag_coords <-
+  tibble(name = c("A", "B", "C", "U", "X", "Y"),
+         x    = c(2, 2, 3, 1, 1, 3),
+         y    = c(4, 2, 3, 3, 1, 1))
+
+dagify(B ~ C + U,
+       C ~ A,
+       U ~ A,
+       X ~ U,
+       Y ~ C + X,
+       coords = dag_coords) %>%
+  gg_fancy_dag(x = 1, y = 3, circle = "U")
+```
+
+バックドアをふさぐためには、AかCのすくなくともどちらかについて条件づける必要がある。Cをいれれば推定の制度も上がるので、Cを入れる方がよりよい（両方入れてもよいが、あまり意味はない）。 
+
+```{r}
+dag_6.1 <- 
+  dagitty(
+    "dag {
+    U [unobserved]
+    X -> Y
+    X <- U <- A -> C -> Y 
+    U -> B <- C
+    }"
+  )
+
+adjustmentSets(dag_6.1, exposure = "X", outcome = "Y")
+```
+
+<br />  
+
+### Backdoor Waffles  
+次に、Waffle House Divorce につい以下のモデルを考える。  
+```{r, echo = FALSE}
+dag_coords <-
+  tibble(name = c("A", "D", "M", "S", "W"),
+         x    = c(1, 3, 2, 1, 3),
+         y    = c(1, 1, 2, 3, 3))
+
+dagify(A ~ S,
+       D ~ A + M + W,
+       M ~ A + S,
+       W ~ S,
+       coords = dag_coords) %>%
+  gg_simple_dag()
+```
+<br />  
+
+AとM、もしくはSで条件づければWとDの間に余計な関係は生じない。  
+```{r}
+dag_6.2 <- 
+  dagitty(
+    "dag {
+    A -> D
+    A -> M -> D
+    A <- S -> M
+    S -> W -> D
+    }"
+  )
+
+adjustmentSets(dag_6.2, exposure = "W", outcome = "D")
+```
+
+<br />  
+
+## Practice  
+
+### 6M1  
+> Modify the DAG on page 186 to include the variable V, an unobserved cause of C and Y: C←V→Y. Reanalyze the DAG. How many paths connect X to Y? Which must be closed? Which variables should you condition on now?  
+
+```{r, echo = FALSE}
+dag_coords <-
+  tibble(name = c("A", "B", "C", "U", "X", "Y","V"),
+         x    = c(2, 2, 3, 1, 1, 3, 3.5),
+         y    = c(4, 2, 3, 3, 1, 1, 2))
+
+dagify(Y ~ X + C + V,
+       X ~ U,
+       U ~ A,
+       B ~ U + C,
+       C ~ A + V,
+       coords = dag_coords) %>%
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(data = . %>% filter(name %in% c("U", "V")),
+                 shape = 1, stroke = 2, color = "black") +
+  geom_dag_text(color = "black", size = 10) +
+  geom_dag_edges(edge_color = "black", edge_width = 2,
+                 arrow_directed = grid::arrow(length = grid::unit(15, "pt"),type = "closed")) +
+  theme_void()
+```  
+
+```{r}
+new_dag <- dagitty("dag { U [unobserved]
+                          V [unobserved]
+                          X -> Y
+                          X <- U <- A -> C -> Y
+                          U -> B <- C
+                          C <- V -> Y }")
+
+adjustmentSets(new_dag, exposure = "X", outcome = "Y")
+```
+
+<br />  
+
+### 6M2  
+> Sometimes, in order to avoid multicollinearity, people inspect pairwise correlations among predictors before including them in a model. This is a bad procedure, because what matters is the conditional association, not the association before the variables are included in the model. To highlight this, consider the DAG X→Z→Y. Simulate data from this DAG so that the correlation between X and Z is very large. Then include both in a model prediction Y
+. Do you observe any multicollinearity? Why or why not? What is different from the legs example in the chapter?
+
+```{r}
+set.seed(1984)
+
+n <- 100
+dat <- tibble(x = rnorm(n,0,1)) %>% 
+  mutate(z = rnorm(n,x,0.4),
+         y = rnorm(n,z,1))
+
+cor(dat)
+pairs(dat)
+```
+
+上手く推定できてると思われる。  
+```{r}
+b6M2 <- 
+  brm(
+    data = dat,
+    family = gaussian,
+    formula = y ~ 1 + z + x,
+    prior = c(prior(normal(0,0.2),class = Intercept),
+              prior(normal(0,0.5),class =b),
+              prior(exponential(1),class=sigma)),
+    iter=4000, warmup=2000, chains =4, seed=1234,
+    backend = "cmdstanr",
+    file = "output/Chapter6/b6M2"
+  )
+
+posterior_summary(b6M2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_samples(b6M2) %>%
+  as_tibble() %>%
+  dplyr::select(-lp__) %>%
+  pivot_longer(everything()) %>%
+  ggplot(aes(x = value, y = name)) +
+  stat_halfeye(.width = c(0.67, 0.89, 0.97))
+
+pairs(b6M2)
+```
+
+<br />  
+
+繰り返してみる。  
+推定結果も両脚と身長の例ほどはばらついていない。  
+```{r}
+sim_and_fit <- function(seed, n = 100) {
+  n <- n
+  set.seed(seed)
+  dat <- tibble(x = rnorm(n,0,1)) %>% 
+  mutate(z = rnorm(n,x,0.4),
+         y = rnorm(n,z,1))
+  fit <- update(b6M2, newdata = dat) 
+}
+
+#sim2 <-
+ # tibble(seed = 1:4) %>% 
+  #mutate(post = purrr::map(seed, ~sim_and_fit(.) %>% 
+   #                   posterior_samples()))
+
+sim2 <- readRDS("output/Chapter6/sim2.rds")
+
+sim2 %>% 
+  unnest(post) %>%
+  pivot_longer(b_Intercept:sigma) %>% 
+  mutate(seed = str_c("seed ", seed)) %>% 
+  ggplot(aes(x = value, y = name)) +
+  stat_pointinterval(.width = .95, color = "forestgreen") +
+  labs(x = "posterior", y = NULL) +
+  theme(axis.text.y = element_text(hjust = 0),
+        panel.border = element_rect(color = "black", fill = "transparent"),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(hjust = 0)) +
+  facet_wrap(~ seed, ncol = 1)
+```
+
+これは、身長の例では両脚(L,R)がどちらも身長(H)を予測するのに対して、今回の例ではZのみがYを予測し、XからYへのパスはブロックされているから。  
+このように、多重共線性が生じるかは単純に変数間の相関だけではわからず、因果モデルを考える必要がある。  
+<br />  
+
+### 6H1  
+> Use the Waffle House data, `data(WaffleDivorce)`, to find the total causal influence of number of Waffle Houses on divorce rate. Justify your model or models with a causal graph.  
+
+```{r}
+data("WaffleDivorce")
+
+dat2 <- WaffleDivorce %>% 
+  mutate(M = standardize(Marriage),
+         A = standardize(MedianAgeMarriage),
+         D = standardize(Divorce),
+         S = factor(South + 1, labels = c("North", "South")),
+         W = standardize(WaffleHouses))  
+```
+
+Sを入れてモデリング。  
+Wはほとんど影響していないことが分かる。
+```{r}
+b6H1 <- 
+  brm(data = dat2,
+      family = gaussian,
+      formula = D ~ 0 + W + S,
+      prior = c(prior(normal(0,0.5),class =b),
+                prior(exponential(1),class = sigma)),
+      iter=4000, warmup=2000,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H1")
+
+posterior_summary(b6H1) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+<br />  
+
+### 6H2  
+> Build a series of models to test the implied conditional independencies of the causal graph you used in the previous problem. If any of the tests fail, how do you think the graph needs to be ammended? Does the graph need more or fewer arrows? Feel free to nominate variables that aren’t in the data.  
+
+DAGの条件付き独立がどのような時に起こるかを調べてみる。  以下の3つをモデリングしてみる。
+```{r}
+dag_coords <-
+  tibble(name = c("A", "D", "M", "S", "W"),
+         x    = c(1, 3, 2, 1, 3),
+         y    = c(1, 1, 2, 3, 3))
+
+waffle_dag <- 
+  dagify(A ~ S,
+       D ~ A + M + W,
+       M ~ A + S,
+       W ~ S,
+       coords = dag_coords) 
+
+impliedConditionalIndependencies((waffle_dag))
+```
+
+<br />  
+
+モデルの結果、1と3については条件付き独立を支持する結果が得られたた。  
+2については信用区間が0にまたがっているが若干あいまいな結果だった。これはおそらくまだ他の要因が関わっているからだと思われる。　　  
+
+```{r}
+b6H2_1 <- brm(data = dat2,
+      family = gaussian,
+      formula = A ~ 1 + W + South,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0,0.5),class =b),
+                prior(exponential(1),class = sigma)),
+      iter=4000, warmup=2000,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H2_1")
+
+b6H2_2 <- brm(data = dat2,
+      family = gaussian,
+      formula = D ~ 1 + A + M + W + South,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0,0.5),class =b),
+                prior(exponential(1),class = sigma)),
+      iter=4000, warmup=2000,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H2_2")
+
+b6H2_3 <- brm(data = dat2,
+      family = gaussian,
+      formula = M ~ 1 + W + South,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0,0.5),class =b),
+                prior(exponential(1),class = sigma)),
+      iter=4000, warmup=2000,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H2_3")
+
+posterior_summary(b6H2_1) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_summary(b6H2_2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+
+posterior_summary(b6H2_3) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+<br />  
+
+### 6H3  
+> Use a model to infer the total causal influence of area on weight. Would increasing the area available to each fox make it heavier (healthier)? You might want to standardize the variables. Regardless, use prior predictive simulation to show that your model’s prior predictions stay within the possible outcome range.  
+
+```{r, echo = FALSE}
+dag_coords <-
+  tibble(name = 
+           c("avgfood","area","weight","groupsize"),
+           x    = c(1, 2, 2, 3),
+           y    = c(2, 3, 1, 2))
+
+dagify(weight ~ avgfood + groupsize,
+       groupsize ~ avgfood,
+       avgfood ~ area,
+       coords = dag_coords) %>%
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend))+
+  geom_dag_text(color = "black", size = 5) +
+  geom_dag_edges(edge_color = "black", edge_width = 2,
+                 arrow_directed = grid::arrow(length = grid::unit(8, "pt"),type = "closed")) +
+  theme_void()
+```
+
+<br />  
+
+areaとweightは他の変数を条件づけなくてもバックドア基準を満たすため、どの変数も入れなくてよい。
+
+```{r}
+dag_fox <- dagitty(
+  "dag{
+  area -> avgfood -> weight <- groupsize ;
+  avgfood -> groupsize
+  }"
+)
+
+adjustmentSets(dag_fox, exposure = "area", outcome ="weight")
+```
+
+```{r}
+data(foxes)
+dat3 <- foxes %>% 
+  as_tibble() %>% 
+  dplyr::select(area, avgfood, weight, groupsize) %>% 
+  mutate(across(everything(),standardize))
+
+head(dat3)
+pairs(dat3)
+
+b6H3 <- 
+  brm(data = dat3,
+      family = gaussian,
+      formula = weight ~ 1 + area,
+      prior = c(prior(normal(0, 0.2),class=Intercept),
+                prior(normal(0, 0.5), class = b,),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000, chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H3")
+```
+<br />  
+
+areaはほとんど影響していなかった。  
+```{r}
+posterior_samples(b6H3) %>% 
+  as_tibble() %>% 
+  dplyr::select(-lp__) %>% 
+  pivot_longer(everything()) %>% 
+  mutate(name = factor(name, levels = c("b_Intercept", "b_area", "sigma"))) %>%
+  ggplot(aes(x = value, y = fct_rev(name))) +
+  stat_halfeye(.width = c(0.67, 0.89, 0.97)) +
+  labs(x = "Parameter Estimate", y = "Parameter")
+```
+<br />  
+
+### 6H4  
+> Now infer the causal impact of adding food to a territory. Would this make foxes heavier? Which covariates do you need to adjust for to estimate the total causal influence of food?  
+
+続いて、えさの量が体重に与える影響を考える。  
+えさの量が体重に与える影響を評価するために他の変数を加える必要はない。  
+
+```{r}
+adjustmentSets(dag_fox, exposure = "avgfood", outcome ="weight")
+```
+
+えさの量も影響せず。  
+```{r}
+b6H4 <- 
+  brm(data = dat3,
+      family = gaussian,
+      formula = weight ~ 1 + avgfood,
+      prior = c(prior(normal(0, 0.2),class=Intercept),
+                prior(normal(0, 0.5), class = b,),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000, chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H4")
+
+posterior_samples(b6H4) %>% 
+  as_tibble() %>% 
+  dplyr::select(-lp__) %>% 
+  pivot_longer(everything()) %>% 
+  mutate(name = factor(name, levels = c("b_Intercept", "b_avgfood", "sigma"))) %>%
+  ggplot(aes(x = value, y = fct_rev(name))) +
+  stat_halfeye(.width = c(0.67, 0.89, 0.97)) +
+  labs(x = "Parameter Estimate", y = "Parameter")
+```
+<br />  
+
+### 6H5  
+> Now infer the causal impact of group size. Which covariates do you need to adjust for? Looking at the posterior distribution of the resulting model, what do you think explains these data? That is, can you explain the estimates for all three problems? How do they go together?  
+
+最後にgroupsizeの影響を見る。その際には、avgfoodも説明変数に入れる必要がある。  
+その結果、groupsizeはavgfoodを固定したときに負の影響を与えていることが分かった。また、avgfoodはgroupsizeを固定したときに正の影響を与えることが分かった。  
+ただし、avgfoodがweightに与える全体的な影響は前問で見たように0である。これは、avgfoodが増えればgroupsizeも増えてしまうからである。
+```{r}
+b6H5 <- 
+  brm(data = dat3,
+      family = gaussian,
+      formula = weight ~ 1 + avgfood + groupsize,
+      prior = c(prior(normal(0, 0.2),class=Intercept),
+                prior(normal(0, 0.5), class = b,),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000, chains = 4, cores = 4, seed = 1234,
+      file = "output/Chapter6/b6H5")
+
+posterior_samples(b6H5) %>% 
+  as_tibble() %>% 
+  dplyr::select(-lp__) %>% 
+  pivot_longer(everything()) %>% 
+  mutate(name = factor(name, levels = c("b_Intercept", "b_avgfood","b_groupsize", "sigma"))) %>%
+  ggplot(aes(x = value, y = fct_rev(name))) +
+  stat_halfeye(.width = c(0.67, 0.89, 0.97)) +
+  labs(x = "Parameter Estimate", y = "Parameter")
+
+posterior_summary(b6H5) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+## おまけ　ランダム効果を入れてみる
+```{r}
+dat3 <- foxes %>% 
+  as_tibble() %>%  
+  mutate(across(2:5,standardize))
+
+head(dat3)
+
+b6H5_2 <- 
+  brm(data = dat3,
+      family = gaussian,
+      formula = weight ~ 1 + avgfood + groupsize + (1|group),
+      prior = c(prior(normal(0, 0.2),class=Intercept),
+                prior(normal(0, 0.5), class = b,),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000, chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b6H5_2")
+
+
+posterior_summary(b6H5_2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameter") %>% 
+  as_tibble()
+```
+
+<br />  
+
+
+
+
+  
+
+
+
+
+
+
+
+

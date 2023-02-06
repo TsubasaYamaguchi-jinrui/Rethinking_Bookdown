@@ -1,0 +1,1189 @@
+# Ulysses' Compass 
+
+## The problems with parameters  
+説明変数が多ければ多いほどモデルのデータへの当てはまりは良くなる。しかし、既存のデータへの当てはまりがよくなりすぎると(overfitting)、新たなデータを予測する制度が低くなってしまう。一方で、シンプルすぎるモデルもうまく予測ができない(underfitting)。  
+<br />  
+
+### More parameters always improve fit  
+ホミニンの脳容量と体重の関係を考える。  
+
+```{r}
+(d <- 
+  tibble(species = c("afarensis", "africanus", "habilis", "boisei", "rudolfensis", "ergaster", "sapiens"), 
+         brain= c(438, 452, 612, 521, 752, 871, 1350), 
+         mass = c(37.0, 35.5,34.5,41.5,55.5,61.0,53.5)))
+
+
+d %>% 
+  ggplot(aes(x=mass,y=brain))+
+  geom_point(size=3.5,shape=1,color="navy")+
+  geom_text_repel(aes(label = species))+
+  scale_y_continuous(breaks = seq(600,1200,200))+
+  scale_x_continuous(limits = c(30,70),breaks=seq(30,70,10))+
+  theme(aspect.ratio=1)+
+  labs(x="body mass (kg)",y="brain volume (cc)",
+       subtitle = "Average brain volume by body\nmass for six hominin species")
+```
+
+標準化する。
+```{r}
+d %>% 
+  mutate(M = (mass-mean(mass))/sd(mass),
+         B = brain/max(brain)) -> d
+```
+<br />  
+
+#### 単回帰
+まずは単純な線形回帰を考える。モデルは以下の通り。  
+<br />  
+
+$B_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = \alpha + \beta M_{i}$  
+$\alpha \sim Normal(0.5,1)$  
+$\beta \sim Normal(0,10)$  
+$\sigma \sim Lognormal(0,1)$  
+
+```{r}
+b7.1 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = B ~ 1 + M,
+      prior = c(prior(normal(0.5, 1),class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(lognormal(0, 1), class = sigma)),
+      seed =7, file = "output/Chapter7/b7.1")
+
+posterior_summary(b7.1) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameters") %>% 
+  as_tibble()
+```
+<br />  
+
+$R^2$を計算する。  
+```{r}
+R2 <- function(brm_fit, seed = 7, ...) {
+  set.seed(seed)
+  p <- predict(brm_fit, summary = F, ...)
+  r <- apply(p, 2, mean) - d$B
+  1 - rethinking::var2(r)/rethinking::var2(d$B)
+}
+
+R2(b7.1,seed=7)
+```  
+<br />  
+
+#### 多項回帰  
+続いて、2乗項を入れたモデルを考える。  
+
+<br />  
+
+$B_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = \alpha + \beta_{1} M{i} + \beta_{2} M_{i}^2$  
+$\alpha \sim Normal(0.5,1)$  
+$\beta_{j} \sim Normal(0,10) \;\; j =1,2$  
+$\sigma \sim Lognormal(0,1)$  
+
+```{r}
+b7.2 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = B ~ 1 + M + I(M^2),
+      prior = c(prior(normal(0.5, 1),class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(lognormal(0, 1), class = sigma)),
+      seed =7, file = "output/Chapter7/b7.2")
+
+posterior_summary(b7.2) %>% 
+  round(2) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameters") %>% 
+  as_tibble()
+
+R2(b7.2)
+```  
+<br />  
+
+同様に、3乗項～6乗項を順番に足したモデルを考える。  
+
+```{r}
+b7.3 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = B ~ 1 + M + I(M^2)+I(M^3),
+      prior = c(prior(normal(0.5, 1),class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(lognormal(0, 1), class = sigma)),
+      control = list(adapt_delta = .99),
+      seed =7, file = "output/Chapter7/b7.3")
+
+b7.4 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = B ~ 1 + M + I(M^2)+I(M^3)+I(M^4),
+      prior = c(prior(normal(0.5, 1),class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(lognormal(0, 1), class = sigma)),
+                     iter =18000, warmup=10000,thin=4,
+      control = list(adapt_delta = .995,
+                     max_treedepth = 15),
+      seed =7, file = "output/Chapter7/b7.4")
+
+b7.5 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = B ~ 1 + M + I(M^2)+I(M^3)+I(M^4)+I(M^5),
+      prior = c(prior(normal(0.5, 1),class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(lognormal(0, 1), class = sigma)),
+      iter=20000,warmup=18000,thin=1,
+      control = list(adapt_delta = .999,
+                     max_treedepth = 15),
+      seed =7, file = "output/Chapter7/b7.5")
+```
+
+6乗項を入れるときには、少し手間が必要。　
+$\sigma$を0.001に固定する。
+```{r}
+custom_normal <- custom_family(
+  "custom_normal", dpars = "mu",
+  links = "identity",
+  type = "real"
+)
+
+stan_funs  <- "real custom_normal_lpdf(real y, real mu) {
+  return normal_lpdf(y | mu, 0.001);
+}
+real custom_normal_rng(real mu) {
+  return normal_rng(mu, 0.001);
+}
+" 
+
+stanvars <- stanvar(scode = stan_funs, block = "functions")
+
+b7.6 <- 
+  brm(data = d,
+      family = custom_normal,
+      formula = B ~ 1 + M + I(M^2)+I(M^3)+I(M^4)+I(M^5)+I(M^6),
+      prior = c(prior(normal(0.5, 1),class = Intercept),
+                prior(normal(0, 10), class = b)),
+      iter=8000,warmup=5000,
+      control = list(adapt_delta = .999,
+                     max_treedepth = 15),
+      stanvars = stanvars,
+      seed =7, file = "output/Chapter7/b7.6")
+```
+<br />  
+
+```{r, echo = FALSE}
+expose_functions(b7.6, vectorize = TRUE)
+
+posterior_epred_custom_normal <- function(prep) {
+  mu <- prep$dpars$mu
+  mu 
+}
+
+posterior_predict_custom_normal <- function(i, prep, ...) {
+  mu <- prep$dpars$mu
+  mu 
+  custom_normal_rng(mu)
+}
+
+log_lik_custom_normal <- function(i, prep) {
+  mu <- prep$dpars$mu
+  y <- prep$data$Y[i]
+  custom_normal_lpdf(y, mu)
+}
+```
+
+
+#### plot
+全ての結果を作図する。  
+複雑なモデルほどフィットするようになる(R2も大きくなる)ことが分かる。  
+```{r}
+#make_figure <- function(brms_fit, ylim = range(d$B)){
+  
+ # r2 <- R2(brms_fit)
+  
+  #nd <- tibble(M = seq(-2,2,length.out=200))
+  
+  #fitted(brms_fit,newdata = nd, probs = c(0.055,0.945)) %>% 
+  #data.frame() %>% 
+  #bind_cols(nd) %>% 
+  #ggplot()+
+  #geom_lineribbon(aes(x=M, y = Estimate, 
+   #          ymin = Q5.5,ymax=Q94.5),
+    #         color = "black", fill="black",alpha=3/8,
+     #        size=1)+
+  #geom_point(data=d, aes(x=M,y=B),
+   #          color="navy",size=2)+
+  #labs(subtitle =  bquote(italic(R)^2==.(round(r2, digits = 2))),
+   #      x = "body mass (std)",
+    #     y = "brain volume (std)") +
+    #coord_cartesian(xlim = c(-1.2, 1.5),
+     #               ylim = ylim)+
+    #theme_classic()+
+    #theme(aspect.ratio=1)
+   
+#}
+
+#p1 <- make_figure(b7.1)
+#p2 <- make_figure(b7.2)
+#p3 <- make_figure(b7.3)
+#p4 <- make_figure(b7.4, ylim =c(.25,1.1))
+#p5 <- make_figure(b7.5, ylim =c(.1,1.4))
+#p6 <- make_figure(b7.6,ylim = c(-0.25,1.5))+
+#  geom_hline(yintercept = 0, color = "grey",
+ #            linetype=2)+
+  #labs(subtitle = bquote(italic(R)^2== "1"))
+
+#((p1|p2|p3))/((p4|p5|p6))+
+ #  plot_annotation(title = "Figure7.3. Polynomial linear models of increasing\ndegree for the hominin data.") ->p7
+
+
+p7 <- readRDS("output/Chapter7/p7.rds")
+p7
+```
+
+<br />  
+
+### Too few parameters hurts too  
+複雑なモデルほどデータを1つ抜いた時に結果が大きく変わってしまう。一方で、シンプルなモデルは1つデータを抜いても大きく推定結果は変わらない。
+
+```{r}
+brain_loo_lines <- function(brms_fit, row, ...) {
+  
+  nd <- tibble(M = seq(-2,2,length.out=200))
+  
+  # refit the model
+  new_fit <- 
+    update(brms_fit,
+           newdata = filter(d, row_number() != row), 
+           iter = 2000, warmup = 1000, chains = 4, cores = 4,
+           seed = 7,
+           refresh = 0,
+           ...)
+  
+  # pull the lines values
+  fitted(new_fit, 
+         newdata = nd) %>% 
+    data.frame() %>% 
+    dplyr::select(Estimate) %>% 
+    bind_cols(nd)
+  
+}
+
+#b7.1_fits <-
+ # tibble(row = 1:7) %>% 
+  #mutate(post = purrr::map(row, ~brain_loo_lines(brms_fit = b7.1, row = .))) %>% 
+  #unnest(post)
+
+b7.1_fits <- readRDS("output/Chapter7/b7.1_fits.rds")
+
+#b7.4_fits <-
+ # tibble(row = 1:7) %>% 
+  #mutate(post = purrr::map(row, ~brain_loo_lines(brms_fit = b7.4,  row = .,             
+   #                                              control = list(adapt_delta = .999)))) %>% 
+  #unnest(post)
+
+b7.4_fits <-readRDS("output/Chapter7/b7.4_fits.rds")
+```
+
+```{r}
+p1 <-
+  b7.1_fits %>%  
+  ggplot(aes(x = M)) +
+  geom_line(aes(y = Estimate, group = row), size = 1/2, alpha = 1/2) +
+  geom_point(data = d,
+             aes(y = B),) +
+  labs(subtitle = "b7.1",
+       x = "body mass (std)",
+       y = "brain volume (std)") +
+  coord_cartesian(xlim = range(d$M),
+                  ylim = range(d$B))+
+  theme_classic()+
+  theme(aspect.ratio=1)
+
+# right
+p2 <-
+  b7.4_fits %>%  
+  
+  ggplot(aes(x = M, y = Estimate)) +
+  geom_line(aes(group = row), size = 1/2, alpha = 1/2) +
+  geom_point(data = d,
+             aes(y = B)) +
+  labs(subtitle = "b7.4",
+       x = "body mass (std)",
+       y = "brain volume (std)") +
+  coord_cartesian(xlim = range(d$M),
+                  ylim = c(-0.1, 1.4))+
+  theme_classic()+
+  theme(aspect.ratio=1)
+
+# combine
+p1 + p2
+```  
+
+<br />  
+
+## Entropy and accuracy  
+### Information and uncertainty
+どのようにモデルを評価すればいいだろうか。  
+**Information theory**では、不確実性を評価するうえで以下の指標を用いる(= **Information entropy**)。 ただし、$n$個の異なる出来事が起きる可能性がある場合、$p_{i}$はイベント$i$が起きる確率である。  
+
+<br />  
+
+$H(p) = -Elog(p_{i}) = - \sum_{i=1}^n log(p_{i})$  
+
+<br />
+
+例えば、晴れと雨になる確率がそれぞれ0.3と0.7であれば、以下のようになる。
+```{r}
+p <- c(0.3, 0.7)
+-sum(p*log(p))
+```
+<br />  
+
+### From entropy to acculacy  
+実際にモデルが真のモデル(target)からどの程度外れているかを評価する際には、*Kullback-Leibler divergence*を用いる。*KL divergence*は以下の式で与えられる。  
+なお、イベント$i$が起こる真の確率を$p_{i}$、あるモデルにおいてイベント$i$が起きるとされる確率を$q_{i}$とおく。  
+<br />  
+
+$D_{KL}(p,q) = \sum_{i} p_{i}(log(p_{i})-log(q_{i})) = \sum_{i} p_{i}log(\frac{p_{i}}{q_{i}})$  
+
+<br />  
+
+例えば、p = {0.3, 0.7}のとき、qによってdivergenceがどのように変化するかを調べると以下のようになり、真の値から遠ざかるほど大きくなることが分かる。  
+
+```{r}
+D <- tibble(
+  p_1 = 0.3,
+  p_2 = 0.7,
+  q_1 = seq(0.01,0.99,by = 0.01)
+  ) %>% 
+  mutate(q_2 = 1 - q_1,
+         d_kl = (p_1*log(p_1/q_1))+(p_2*log(p_2/q_2)))
+
+D %>% 
+  ggplot(aes(x=q_1,y=d_kl))+
+  geom_line(color="navy",size=1)+
+  geom_vline(aes(xintercept = p_1),linetype="dashed")+
+  annotate(geom="text",x=0.4,y=1.5,label="q = p")+
+  theme(aspect.ratio=1)+
+  labs(x = "q[1]", y = "Divergence of q from p")
+  
+```
+<br />  
+
+### Estimating divergence  
+真のモデルが未知な状態($p_{i}$が未知)で$divergence$は推定できないが、異なるモデル同士の$divergence$の差を求めることはできる($p_{i}$が打ち消されるので)。その際、そのモデルの平均対数尤度さえわかればよい。  
+そこで、以下の値を求める($\frac{1}{n}$倍していないので、平均対数尤度のn倍値である)。  
+<br />  
+
+$S(q) = \sum_{i} log(q_{i})$  
+
+<br />  
+
+ベイズ統計では、事後分布を用いて*log-pointwise-predictive-density*を用いることで対数尤度を求める。  
+なお、以下で$y$はデータを、$\theta$はパラメータを、Sはiterationの数を表す。  
+
+$lppd(y, \theta) = \sum_{i} log\frac{1}{S} \sum_{s}p(y_{i}|\theta_{s})$  
+
+```{r}
+lppd <- function(brms_fit) {
+  
+  log_lik(brms_fit) %>%
+    data.frame() %>% 
+    pivot_longer(everything()) %>% 
+  mutate(prob = exp(value)) %>% 
+  group_by(name) %>% 
+  summarise(log_prob_score = mean(prob) %>% log()) %>% 
+  summarise(lppd = sum(log_prob_score))
+}
+
+lppd(b7.1)
+```
+<br />  
+
+### Scoring the right data  
+対数尤度も$R^2$と同様にモデルが複雑なほど大きくなってしまう。-> brmsの結果だと少し変...?
+
+```{r}
+#tibble(name = str_c("b7.", 1:6)) %>% 
+ # mutate(brms_fit = purrr::map(name,get)) %>% 
+  #mutate(lppd = purrr::map(brms_fit, lppd)) %>% 
+  #unnest(lppd) -> t_lppd
+
+readRDS("output/Chapter7/t_lppd.rds")
+```  
+<br />  
+
+ここで、以下のシミュレーションを考える。  
+1. ある真のモデル(パラメータは3個)を仮定し、そのモデルからデータを10000個生成する。    
+2. 生成したデータに対してパラメータをそれぞれ1~5個としたモデルをあてはめ、*Deviance*を計算する。これをN回繰り返す(training)。   
+3. 真のモデルから新たに10000回データを生成し、2で用いたモデルをあてはめ、*Deviance*を計算する(test)。これをN回繰り返す。  
+
+<br />  
+
+すると、training  dataに関しては、パラメータの数が大きいほど*Deviance*も小さくなる(当てはまりがよくなる)が、test dataに関してはパラメータが3のときに最も*Deviance*が小さくなる。  
+
+<br />  
+
+## Golem taming: regularization  
+overfittingを防ぐ方法の一つは、データの過学習を防ぐような事前分布を用いることである。そのような事前分布の一つが*regularizing prior*である。  
+幅の狭い事前分布を用いれば、とくにデータが少ないときにはoverfittingをある程度は防ぐことができる。ただし、あまりに狭いとunderfittingになるので注意が必要である。  
+<br />  
+
+## Predicting predictive accuracy    
+実際にはtest sampleは存在しない。それでは、どのようにモデルを評価すればいいだろうか。  
+主要な方法としては、*cross validation*と*information criteria*がある。  
+
+### Cross validation  
+全てのサンプルについてLOOCVを行うのは計算が大変なため、各サンプルの重要度(事後分布に影響を与える程度)に応じて重みづけをする*Pareto-smoothed importance sampling*(PSIS)がよく用いられる。  
+
+```{r}
+#lppd <- tibble(name = str_c("b7.", 1:2)) %>% 
+ # mutate(brms_fit = purrr::map(name,get)) %>% 
+  #mutate(lppd = purrr::map(brms_fit, loo, reloo= "T")) 
+
+lppd <- readRDS("output/Chapter7/lppd.rds")
+
+lppd$lppd[[1]]
+lppd$lppd[[2]]
+```
+<br />  
+
+### Information criteria  
+もう一つが情報量基準である。  
+事前分布がflatなとき、overfittingによって*Deviance*がパラメータの2倍分だけ向上することが理論的に分かっている(see figure7.8)。AICはこれを利用して以下のようにモデルを評価する(ただし、pはパラメータの数)。  
+<br />  
+
+$AIC = D_{train} + 2p = -2lppd + 2p$  
+
+<br />  
+
+ただし、AICは以下の仮定を満たしているときにしか使えない。  
+1. 事前分布がflatであるか、事後分布にほとんど影響を与えないとき。    
+2. 事後分布が多変量正規分布に従うとき。  
+3. サンプル数Nがパラメータ数pよりも十分大きいとき。  
+<br />  
+
+＊DICは1の仮定が不要であるが、2と3の仮定は必要。  
+
+<br />  
+
+**WAIC**  
+1と2の仮定を必要とせず、Nが大きいときにはLOOCVの結果と一致する。  
+
+$WAIC(y,\theta) = -2(lppd - \sum_{i} var_{\theta} log p(y_{i}|\theta))$  
+
+<br />  
+
+```{r}
+tibble(name = str_c("b7.", 1:5)) %>% 
+  mutate(brms_fit = purrr::map(name,get)) %>% 
+  mutate(WAIC = purrr::map(brms_fit, WAIC)) ->r
+
+r$WAIC
+```
+<br />  
+
+### overthinking: WAIC calculation  
+以下の例を考える。  
+```{r}
+data(cars)
+head(cars)
+
+b7.m <- brm(
+  data = cars,
+  family = gaussian,
+  formula = dist ~ 1+ speed,
+   prior = c(prior(normal(0, 100), class = Intercept),
+                prior(normal(0, 10), class = b),
+                prior(exponential(1), class = sigma)),
+  backend = "cmdstanr",
+  seed=7, file = "output/Chapter7/b7.m"
+)
+
+posterior_summary(b7.m) %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "parameters") %>% 
+  filter(parameters !="lp__") %>% 
+  as_tibble()
+```
+
+WAICを計算する。  
+関数を使った値とほとんど一致する。  
+```{r}
+lppd <- lppd(b7.m)[[1]]
+
+pwaic <- 
+  log_lik(b7.m) %>% 
+  data.frame() %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  summarise(var_log = var(value)) %>% 
+  summarise(pwaic = sum(var_log)) %>% 
+  pull()
+
+hand_waic <- -2*(lppd-pwaic)
+
+hand_waic
+WAIC(b7.m)
+loo(b7.m)
+```
+
+<br />  
+
+### Comparing CV, PSIS, and WAIC  
+それぞれを比較して使うことが重要である。  
+正しく推定できていれば、ほとんど同じになるはずである。  
+<br />  
+
+## Model comparison  
+### Model mis-selection  
+WAICやPSISはあくまでもモデルの予測に関する指標であって、因果関係についてはなにも教えてくれない。  
+
+<br />  
+
+例えば、Chapter6での植物の成長に関するモデルを再び考える。処置後の真菌の情報を入れたモデルは、処置が植物の成長に与える影響を推測する際には不適切だが、WAICはもっとも小さい。  
+
+```{r}
+b6.3_h <- readRDS("output/Chapter6/b6.3_h.rds")
+b6.3_htf <- readRDS("output/Chapter6/b6.3_htf.rds")
+b6.3_ht <- readRDS("output/Chapter6/b6.3_ht.rds")  
+
+
+# WAIC
+b6.3_h <- add_criterion(b6.3_h, criterion = "waic") 
+b6.3_htf <- add_criterion(b6.3_htf,criterion = "waic") 
+b6.3_ht <- add_criterion(b6.3_ht, criterion = "waic") 
+
+w <- loo_compare(b6.3_h, b6.3_htf, b6.3_ht, criterion = "waic")
+
+print(w, simplify = F) 
+
+#PSIS 
+b6.3_h_loo <- add_criterion(b6.3_h, criterion = "loo") 
+b6.3_htf_loo <- add_criterion(b6.3_htf,criterion = "loo") 
+b6.3_ht_loo <- add_criterion(b6.3_ht, criterion = "loo") 
+
+w_loo <- loo_compare(b6.3_h_loo, b6.3_htf_loo, b6.3_ht_loo, criterion = "loo")
+
+print(w_loo, simplify = F)  
+
+```
+<br />  
+
+WAICの差が正規分布すると仮定すると、b6.3_htfとb6.3_htのWAICの差の99%信頼区間は以下の通り。  
+```{r}
+(w[2, 1] * -2) + c(-1, 1) * (w[2, 2] * 2) * 2.6
+```
+<br />  
+
+WAICを標準誤差と共にプロットすると...。  
+```{r}
+w[,7:8] %>% 
+  data.frame() %>% 
+  rownames_to_column("model_name") %>% 
+  mutate(model_name =
+           fct_reorder(model_name,waic,.desc=T)) %>% 
+  ggplot(aes(x = waic, y = model_name, 
+             xmin = waic - se_waic, 
+             xmax = waic + se_waic))+
+  geom_pointrange(shape=21, fill = "black",color="black")+
+  labs(title = "WAIC with standard error",
+       y = NULL)+
+  theme(axis.ticks.y = element_blank())
+```  
+
+b6.3_hとb6.3_htのWAICの差の標準誤差は差そのものよりも大きい。よってこれらのモデルのWAICの間に差はほとんどないといえる。   
+```{r}
+loo_compare(b6.3_h, b6.3_ht, criterion = "waic")[2,2]*2
+```
+
+各モデルのWAICに基づくweightは以下のように算出する。
+なお、$\varDelta_{i}$はWAICが最小のモデルとのWAICの差である。  
+
+$w_{i} = \frac {exp(-0.5\varDelta_{i})}{\sum_{j} exp(-0.5\varDelta_{j})}$  
+
+```{r}
+model_weights(b6.3_htf,b6.3_h, b6.3_ht, weights = "waic") %>% 
+  round(2)
+```
+<br />  
+
+### Outlier and other illusions  
+Waffle Divorceの例を再び考える。  
+```{r}
+data("WaffleDivorce")
+
+d <- WaffleDivorce %>% 
+  mutate(D = standardize(Divorce),
+         M = standardize(Marriage),
+         A = standardize(MedianAgeMarriage))
+
+rm(WaffleDivorce)
+```
+<br />  
+
+Aのみが説明変数のモデルb5.1が最もPSISが小さいが、b5.3との差はわずかである。つまり、Mはほとんど予測を向上させない。
+```{r}
+b5.1 <- readRDS("output/Chapter5/b5.1.rds")
+b5.2 <- readRDS("output/Chapter5/b5.2.rds")
+b5.3 <- readRDS("output/Chapter5/b5.3.rds")  
+
+b5.1 <- add_criterion(b5.1, criterion = "loo")
+b5.2 <- add_criterion(b5.2, criterion = "loo")
+b5.3 <- add_criterion(b5.3, criterion = "loo")
+
+loo_compare(b5.1,b5.2,b5.3, criterion = "loo") %>% 
+ print(simplify = F)
+
+```
+<br />   
+
+教科書と違い、$k$が大きすぎるデータは出なかった。
+0.5以上となったのは1点のみ。  
+```{r}
+library(loo)
+
+loo(b5.3) %>% 
+  pareto_k_ids(threshold = .5)
+
+d %>% 
+  slice(13) %>% 
+  dplyr::select(Location,Loc)
+
+pareto_k_values(loo(b5.3))[13]
+```
+
+WAICのpwaicと比較してみる。  
+```{r}
+k <- pareto_k_values(loo(b5.3))  
+b5.3 <- add_criterion(b5.3, "waic")
+
+tibble(k = k,
+       p_waic = b5.3$criteria$waic$pointwise[,2],
+       Loc = pull(d,Loc)) %>% 
+  ggplot(aes(x = k, y = p_waic, color = Loc == "ID"))+
+  geom_vline(xintercept = 0.5, linetype = "dashed",
+             alpha =1/2)+
+  geom_point(aes(shape = Loc == "ID"),size=2, stroke=1.5)+
+  geom_text(data = . %>% filter(p_waic >.5),
+                  aes(x = k-0.05,label=Loc))+
+  scale_shape_manual(values=c(1,19))+
+  scale_color_manual(values=c("navy","red"))+
+  theme(legend.position="none",
+        aspect.ratio=1)+
+  labs(title = "b5.3") ->p1
+
+p1
+```  
+<br />  
+
+外れ値があった場合、正規分布よりも裾の広い分布を用いることでより頑強な結果が得られる。  
+
+```{r}
+b5.3t <- 
+  brm(data =d,
+      family = student,
+      formula = bf(D ~ 1 + A + M, nu=2),
+      prior = c(prior(normal(0, 0.2),class= Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      backend = "cmdstanr",
+      seed =5, file = "output/Chapter7/b5.3t")
+
+posterior_summary(b5.3) %>% 
+  data.frame() %>% 
+  round(2) %>% 
+  rownames_to_column(var = "parameters") %>% 
+  filter(parameters %in% c("b_Intercept","b_A","b_M","sigma")) %>% 
+  as_tibble() 
+
+posterior_summary(b5.3t) %>% 
+  data.frame() %>% 
+  round(2) %>% 
+  rownames_to_column(var = "parameters") %>% 
+  filter(parameters %in% c("b_Intercept","b_A","b_M","sigma")) %>% 
+  as_tibble() 
+  
+```  
+
+```{r}
+b5.3t <- add_criterion(b5.3t,c("waic","loo"))
+```
+
+かなり改善したことが分かる。  
+```{r}
+k_t <- pareto_k_values(loo(b5.3t))
+tibble(k = k_t,
+       p_waic = b5.3t$criteria$waic$pointwise[,2],
+       Loc = pull(d,Loc)) %>% 
+  ggplot(aes(x = k, y = p_waic, color = Loc == "ID"))+
+  geom_point(aes(shape = Loc == "ID"),size=2, stroke=1.5)+
+  geom_text(data = . %>% filter(Loc %in%c("ME","ID")),
+                  aes(x = k-0.02,y = p_waic+0.02,label=Loc))+
+  scale_shape_manual(values=c(1,19))+
+  scale_color_manual(values=c("navy","red"))+
+  theme(legend.position="none",
+        aspect.ratio=1)+
+  labs(title = "b5.3t") ->p2
+
+p1|p2
+```
+
+<br />  
+
+## Practice  
+### 7E2  
+> Suppose a coin is weighted such that, when it is tossed and lands on a table, it comes up heads 70% of the time. What is the entropy of this coin?  
+```{r}
+-(0.7*log(0.7)+0.3*log(0.3))
+```
+
+### 7E3  
+> Suppose a four-sided die is loaded such that, when tossed onto a table, it shows “1” 20%, “2” 25%, “3” 25%, and “4” 30% of the time. What is the entropy of this die?  
+
+```{r}
+x <- c(0.2,0.25,0.25,0.3)
+
+ent <- function(x) {
+  
+ent <-  tibble(p = x) %>% 
+    mutate(plog = p*log(p)) %>% 
+    summarise(entropy = -sum(plog))
+
+print(ent)
+}
+
+ent(x)  
+```
+
+
+### 7E4  
+> Suppose another four-sided die is loaded such that it never shows “4.” The other three sides show equally often. What is the entropy of this die?  
+
+```{r}
+#4 
+x <- c(1/3,1/3,1/3)
+ent(x)
+```
+<br />  
+
+### 7M4  
+> What happens to the effective number of parameters, as measured by PSIS or WAIC, as a prior becomes more concentrated? Why? Perform some experiments, if you are not sure.  
+
+事前分布が狭いほど事後分布の対数尤度のばらつきも小さくなるので、WAICもPSISも小さくなる。  
+```{r}
+set.seed(2000)
+library(glue)
+
+#prior_sim <- tibble(prior_sd=rep(c(0.1,1,10),each=50)) %>% 
+  #mutate(sample = purrr::map(1:n(),
+                      #function(x){
+                        #n <- 20
+                        #tibble(x1 = rnorm(n = n),
+                               #x2 = rnorm(n = n),
+                               #x3 = rnorm(n = n)) %>%                     mutate(y = rnorm(n = n, mean =0.3 + 
+                    #0.8 * x1 + 0.6 * x2 + 1.2 * x3),
+                  #across(everything(), standardize))
+                      #}),
+         #model = purrr::map2(sample,prior_sd,
+                      #function(df, p_sd){
+                        #mod <- brm(y ~ 1+x1+x2+x3,
+                                   #data=df,
+                                   #family=gaussian,
+  #prior = c(prior(normal(0, 0.2), class = Intercept),
+#prior_string(glue("normal(0, {p_sd})"), class = "b"),
+              #prior(exponential(1), class = sigma)),
+                  #iter=4000,warmup=3000,seed=1234)
+                        #return(mod)
+                      #}))
+
+#prior_sim %>% 
+ #mutate(infc = purrr::map(model, 
+  #         function(mod){
+   #          w <- suppressWarnings(brms::waic(mod))
+    #         p <- suppressWarnings(brms::loo(mod))
+    #tibble(p_waic = w$estimates["p_waic", "Estimate"],
+     #       p_loo = p$estimates["p_loo", "Estimate"])
+      #        })) %>%
+  #unnest(infc) -> prior_sim
+
+prior_sim <- readRDS("output/Chapter7/prior_sim.rds")
+
+prior_sim %>%
+  pivot_longer(cols = c(p_waic, p_loo)) %>%
+  mutate(prior_sd = glue("sd~'='~{prior_sd}"),
+         prior_sd = fct_inorder(prior_sd),
+         name = factor(name, levels = c("p_waic", "p_loo"),
+                       labels = c("p[WAIC]", "p[PSIS]"))) %>%
+ggplot(aes(x = value)) +
+  facet_grid(rows = vars(prior_sd), cols = vars(name),
+             labeller = label_parsed) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.2) +
+  labs(x = "Value", y = "Density") +
+  theme(panel.border = element_rect(fill = NA))
+```
+<br />  
+
+### 7H1    
+> In 2007, The Wall Street Journal published an editorial (“We’re Number One, Alas”) with a graph of corportate tax rates in 29 countries plotted against tax revenue. A badly fit curve was drawn in (reconstructed at right), seemingly by hand, to make the argument that the relationship between tax rate and tax revenue increases and then declines, such that higher tax rates can actually produce less tax revenue. I want you to actually fit a curve to these data, found in `data(Laffer)`. Consider models that use tax rate to predict tax revenue. Compare, using WAIC or PSIS, a straight-line model to any curved models you like. What do you conclude about the relationship between tax rate and tax revenue.  
+
+```{r}
+data(Laffer)
+
+d <- Laffer %>% 
+  mutate(tax_rate2 = tax_rate^2,
+         across(everything(),standardize))
+
+Laffer %>% 
+  ggplot(aes(x=tax_rate,y=tax_revenue))+
+  geom_point(size=3,shape=21,color="navy")+
+  theme_classic()+
+  theme(aspect.ratio=1)
+
+laf_line <- 
+  brm(data = d,
+      family = gaussian,
+      formula = tax_revenue ~ tax_rate,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000,seed = 1234,
+                backend = "cmdstanr",
+                file = "output/Chapter7/laf_line")
+
+laf_curve <- 
+  brm(data = d,
+      family = gaussian,
+      formula = tax_revenue ~ 1+tax_rate + tax_rate2,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000,seed = 1234,
+                backend = "cmdstanr",
+                file = "output/Chapter7/laf_curve")
+
+laf_spline <- 
+  brm(data = d,
+      family = gaussian,
+      formula = tax_revenue ~ 1 + s(tax_rate),
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+              iter = 10000, warmup =6000,seed = 1234,
+              thin = 2,
+      　　　　　　　backend = "cmdstanr",
+                file = "output/Chapter7/laf_spline")
+
+conditional_effects(laf_line, method = "fitted") %>%
+    plot(points = TRUE,theme =theme(aspect.ratio=1)) ->
+  p_line
+
+conditional_effects(laf_curve, method = "fitted",effects = "tax_rate") %>%
+  plot(points = TRUE,theme =theme(aspect.ratio=1))->
+  p_curve
+
+conditional_effects(laf_spline, method = "fitted") %>%
+  plot(points = TRUE,theme =theme(aspect.ratio=1))->
+  p_spline
+
+p_line$tax_rate + p_curve$tax_rate + p_spline$tax_rate
+
+```  
+<br />  
+
+WAICとPSISを計算してみると...。  
+差はほとんどなく、どのモデルも大きな違いはない。  
+```{r}
+laf_line <- add_criterion(laf_line,
+                          criterion = c("waic","loo"))
+
+laf_curve <- add_criterion(laf_curve,
+                          criterion = c("waic","loo"))
+
+laf_spline <- add_criterion(laf_spline,
+                          criterion = c("waic","loo"))
+
+#waic
+loo_compare(laf_line, laf_curve, laf_spline, criterion = "waic") %>% 
+  print(simplify=F)
+
+#loo
+loo_compare(laf_line, laf_curve, laf_spline, criterion = "loo") %>% 
+  print(simplify=F)
+```
+<br/>  
+
+### 7H2  
+> In the `Laffer` data, there is one country with a high tax revenue that is an outlier. Use PSIS and WAIC to measure the importance of this outlier in the models you fit in the previous problem. Then use robust regression with a Student’s t distribution to revist the curve fitting problem. How much does a curved relationship depend upon the outlier point.
+
+一方で、pareto_kが0.7以上の点があり、外れ値があったことがうかがえる。  
+
+```{r}
+library(gghighlight)
+
+criteria_influence <- function(mod) {
+  tibble(pareto_k = mod$criteria$loo$diagnostics$pareto_k,
+         p_waic = mod$criteria$waic$pointwise[, "p_waic"]) %>%
+    rowid_to_column(var = "obs")
+}
+
+influ <- bind_rows(
+  criteria_influence(laf_line) %>%
+    mutate(type = "Linear"),
+  criteria_influence(laf_curve) %>%
+    mutate(type = "Curve"),
+  criteria_influence(laf_spline) %>%
+    mutate(type = "Spline")
+)
+
+ggplot(influ, aes(x = pareto_k, y = p_waic)) +
+  facet_wrap(~type, ncol = 2) +
+  geom_vline(xintercept = 0.7, linetype = "dashed") +
+  geom_hline(yintercept = 0.4, linetype = "dashed") +
+  geom_point() +
+  gghighlight(pareto_k > 0.7 | p_waic > 0.4, n = 1, label_key = obs,
+              label_params = list(size = 3)) +
+  labs(x = expression(Pareto~italic(k)), y = expression(p[WAIC])) +
+  theme(panel.border = element_rect(fill = NA))
+```
+
+
+Student_tでより頑強なモデルをフィットさせる。  
+```{r}
+laf_line_st <- 
+  brm(data = d,
+      family = student,
+      formula = bf(tax_revenue ~ tax_rate,nu=2),
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000,seed = 1234,
+      　　　　　backend = "cmdstanr",
+                file = "output/Chapter7/laf_line_st")
+
+laf_curve_st <- 
+  brm(data = d,
+      family = student,
+      formula = bf(tax_revenue ~ 1+tax_rate + tax_rate2,nu=2),
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000,seed = 1234,
+      　　　　　backend = "cmdstanr",
+                file = "output/Chapter7/laf_curve_st")
+
+laf_spline_st <- 
+  brm(data = d,
+      family = student,
+      formula = bf(tax_revenue ~ 1 + s(tax_rate),nu=2),
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+              iter = 50000, warmup =40000,seed = 1234,
+              thin = 5,
+      　　　　backend = "cmdstanr",
+                file = "output/Chapter7/laf_spline_st")
+
+conditional_effects(laf_line_st, method = "fitted") %>%
+  plot(points = TRUE, theme=theme(aspect.ratio=1)) -> pline_st
+
+conditional_effects(laf_curve_st, method = "fitted") %>%
+  plot(points = TRUE) -> pcurve_st
+
+conditional_effects(laf_spline_st, method = "fitted") %>%
+  plot(points = TRUE) ->pspline_st
+
+pline_st$tax_rate+pcurve_st$tax_rate+pspline_st$tax_rate
+```
+<br/>  
+
+WAICとPSISを計算しても、エラーは出ない。 
+また、WAICとPSISの値もほぼ一致した。  
+```{r}
+laf_line_st <- add_criterion(laf_line_st,
+                          criterion = c("waic","loo"))
+
+laf_curve_st <- add_criterion(laf_curve_st,
+                          criterion = c("waic","loo"))
+
+laf_spline_st <- add_criterion(laf_spline_st,
+                          criterion = c("waic","loo"))
+
+#waic
+loo_compare(laf_line_st, laf_curve_st, laf_spline_st, criterion = "waic") %>% 
+  print(simplify=F)
+
+#loo
+loo_compare(laf_line_st, laf_curve_st, laf_spline_st, criterion = "loo") %>% 
+  print(simplify=F)
+```
+<br/>  
+
+pwaicは高い点があるものの、かなり改善している。 
+```{r}
+
+influ <- bind_rows(
+  criteria_influence(laf_line_st) %>%
+    mutate(type = "Linear"),
+  criteria_influence(laf_curve_st) %>%
+    mutate(type = "Curve"),
+  criteria_influence(laf_spline_st) %>%
+    mutate(type = "Spline")
+)
+
+ggplot(influ, aes(x = pareto_k, y = p_waic)) +
+  facet_wrap(~type, ncol = 2) +
+  geom_vline(xintercept = 0.7, linetype = "dashed") +
+  geom_hline(yintercept = 0.4, linetype = "dashed") +
+  geom_point() +
+  gghighlight(pareto_k > 0.7 | p_waic > 0.4, n = 1, label_key = obs,
+              label_params = list(size = 3)) +
+  labs(x = expression(Pareto~italic(k)), y = expression(p[WAIC])) +
+  theme(panel.border = element_rect(fill = NA))
+```
+<br/>  
+
+### 7H3  
+> Consider three fictional Polynesian islands. On each there is a Royal Ornithologist charged by the king with surveying the bird population. They have each found the following proportions of 5 important bird species:
+
+```{r}
+tibble(island = paste("Island", 1:3),
+       speciesA = c(0.2, 0.8, 0.05),
+       speciesB = c(0.2, 0.1, 0.15),
+       speciesC = c(0.2, 0.05, 0.7),
+       speciesD = c(0.2, 0.025, 0.05),
+       speciesE = c(0.2, 0.025, 0.05)) %>% 
+  datatable()
+```
+
+> Notice that each row sums to 1, all the birds. This problem has two parts. It is not computationally complicated. But it is conceptually tricky. First, compute the entropy of each island’s bird distribution. Interpret these entropy values. Second, use each island’s bird distribution to predict the other two. This means to compute the KL divergence of each island from the others, treating each island as if it were a statistical model of the other islands. You should end up with 6 different KL divergence values. Which island predicts the others best? Why?
+
+Island1ではもっともエントロピーが大きい。  
+よって、Island1で他のデータを予測するときに最もKLdivergenceが小さくなる。
+```{r}
+islands <- tibble(island = paste("Island", 1:3),
+       a = c(0.2, 0.8, 0.05),
+       b = c(0.2, 0.1, 0.15),
+       c = c(0.2, 0.05, 0.7),
+       d = c(0.2, 0.025, 0.05),
+       e = c(0.2, 0.025, 0.05)) %>%
+  pivot_longer(-island, names_to = "species", values_to = "prop")
+
+islands %>% 
+  group_by(island) %>% 
+  summarise(prop=list(prop),.groups="drop") %>%
+  mutate(entropy = purrr::map(prop,ent)) %>% 
+  unnest(entropy) -> islands
+  
+islands
+
+##KL divergence
+  
+d_KL <- function(p,q){
+  sum(p*(log(p)-log(q)))
+  }
+
+crossing(model = paste("Island",1:3),
+         predicts = paste("Island",1:3)) %>% 
+  filter(model!=predicts) %>% 
+  left_join(islands, by=c("model"="island")) %>% 
+  dplyr::select(-entropy) %>% 
+  rename(model_prop = prop) %>% 
+  left_join(islands, by = c("predicts"="island")) %>% 
+  rename(predict_prop = prop) %>% 
+  mutate(d_KL = map2(predict_prop, model_prop,d_KL)) %>% 
+  unnest(d_KL)
+
+```
+
+### 7H4  
+> Recall the marriage, age, and happiness collider bias example from Chapter 6. Run models m6.9 and m6.10 again (page 178). Compare these two models using WAIC (or PSIS, they will produce identical results). Which model is expected to make better predictions? Which model provides the correct causal inference about the influence of age on happiness? Can you explain why the answers to these two questions disagree?  
+
+Chapter6の結婚と年齢が幸福度に与える影響についてもモデルを再度考える。  
+b6.4の方がWAICもPSISも小さいが、このモデルでは因果関係は推論できない。  
+
+```{r}
+b6.4 <- readRDS("output/Chapter6/b6.4.rds")
+b6.4_2 <- readRDS("output/Chapter6/b6.4_2.rds")
+
+b6.4 <- add_criterion(b6.4, criterio =c("waic","loo"))
+b6.4_2 <- add_criterion(b6.4_2, criterio =c("waic","loo"))
+
+loo_compare(b6.4,b6.4_2) %>% 
+  print(simplify=F)
+
+```
+<br />  
+
+### 7H5  
+> Revisit the urban fox data, data(foxes), from the previous chapter’s practice problems. Use WAIC or PSIS based model comparison on five different models, each using weight as the outcome, and containing these sets of predictor variables:
+
+1. avgfood + groupsize + area
+2. avgfood + groupsize
+3. groupsize + area
+4. avgfood
+5. area
+
+> Can you explain the relative differences in WAIC scores, using the fox DAG from the previous chapter? Be sure to pay attention to the standard error of the score differences (dSE).
+
+```{r}
+b7H5_5 <- readRDS("output/Chapter6/b6H3.rds") %>% 
+  add_criterion(c("waic"))
+
+b7H5_4 <- readRDS("output/Chapter6/b6H4.rds") %>% 
+  add_criterion(c("waic"))
+
+b7H5_2 <- readRDS("output/Chapter6/b6H5.rds") %>% 
+  add_criterion(c("waic"))
+
+data(foxes)
+dat3 <- foxes %>% 
+  as_tibble() %>% 
+  dplyr::select(area, avgfood, weight, groupsize) %>% 
+  mutate(across(everything(),standardize))
+
+## 1
+b7H5_1 <- 
+  brm(data = dat3,
+      family = gaussian,
+      formula = weight ~ 1 + area + groupsize + avgfood,
+      prior = c(prior(normal(0, 0.2),class=Intercept),
+                prior(normal(0, 0.5), class = b,),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000, chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b7H5_1")
+
+b7H5_1 <- add_criterion(b7H5_1, "waic")
+
+## 3
+b7H5_3 <- 
+  brm(data = dat3,
+      family = gaussian,
+      formula = weight ~ 1 + area + groupsize + avgfood,
+      prior = c(prior(normal(0, 0.2),class=Intercept),
+                prior(normal(0, 0.5), class = b,),
+                prior(exponential(1), class = sigma)),
+                iter = 4000, warmup = 2000, chains = 4, cores = 4, seed = 1234,
+      backend = "cmdstanr",
+      file = "output/Chapter6/b7H5_3")
+
+b7H5_3 <- add_criterion(b7H5_3, "waic")
+```
+
+1,2,3はほとんど変わらない。  
+areaがweightに与える影響はすべてavgfoodを経由しているため、１と2は全く同じとなる。また、3も同様の理由でほとんど変わらない。  
+4と5も同様である。  
+```{r}
+loo_compare(b7H5_1, b7H5_2, b7H5_3,b7H5_4,b7H5_5,
+            criterion="waic") %>% 
+  print(simplify=F)
+```
+
+

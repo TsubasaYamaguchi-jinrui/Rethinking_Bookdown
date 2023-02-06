@@ -1,0 +1,36 @@
+# パッケージの読み込み{-}
+
+使用したパッケージは以下の通り。ベイズモデリングには、基本的には`brms`[パッケージ](https://paul-buerkner.github.io/brms/)を用いている。  
+
+```{r}
+library(DT)
+library(GGally)
+library(rstan)
+library(bookdown)
+options(kableExtra.latex.load_packages = FALSE)
+library(kableExtra)
+library(knitr)
+library(tidyverse)
+library(rethinking)
+library(brms)
+library(ggmcmc)
+library(tidybayes)
+library(ggrepel)
+library(patchwork)
+library(ggdag)
+library(dagitty)
+library(bayesplot)
+library(ggrepel)
+library(ggthemes)
+library(loo)
+library(gt)
+library(ggrepel)
+library(extrafont)
+require(systemfonts)
+require(fontregisterer)
+extrafont::loadfonts(device = "win")
+
+theme_set(theme_classic(base_size=10.5))
+rstan_options(auto_write = TRUE) 
+options(mc.cores = parallel::detectCores()) 
+```

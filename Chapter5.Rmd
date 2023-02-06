@@ -1,0 +1,1974 @@
+# The many variables & the spurious waffles  
+## Spurious association  
+結婚率と離婚率の間の因果関係を推論する。  
+結婚率と離婚率は正に相関するが、これは因果関係を表すだろうか？  
+<br />  
+```{r}
+data(WaffleDivorce)
+
+d <- WaffleDivorce
+
+head(d)
+```
+
+ちなみにWaffleHouseの店舗数と離婚率の関係
+```{r}
+d %>% 
+  ggplot(aes(x=WaffleHouses/Population, y = Divorce))+
+  geom_point(size=2,color = "navyblue",shape=1)+
+  geom_text_repel(aes(label=Loc),color="black",size=3)+
+  geom_smooth(method = "lm",color="black",size=1)+
+  theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 0.8)
+```
+<br />  
+
+**離婚率**と**結婚率**、**結婚年齢**の関係を考える。  
+```{r}
+d %>% 
+  ggplot(aes(x=Marriage,y=Divorce))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_smooth(method = "lm",color="black",size=1)+
+  theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 0.8)+
+  xlab("Marriage rate")+
+  ylab("Divorce rate") -> p1
+
+d %>% 
+  ggplot(aes(x=MedianAgeMarriage,y=Divorce))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_smooth(method = "lm",color="black",size=1)+
+  theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 0.8)+
+  xlab("Median age marriage")+
+  ylab("Divorce rate") -> p2
+
+
+d %>% 
+  ggplot(aes(x=MedianAgeMarriage,y=Marriage))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_smooth(method = "lm",color="black",size=1)+
+  theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 0.8)+
+  xlab("Median age marriage")+
+  ylab("Marriage rate") -> p3
+
+p1|p2|p3
+```
+<br />  
+
+データを標準化する。
+```{r}
+d %>% 
+  mutate(D = standardize(Divorce),
+         M = standardize(Marriage),
+         A = standardize(MedianAgeMarriage)) ->d
+
+# ちなみに
+sd(d$Divorce)
+sd(d$Marriage)
+sd(d$MedianAgeMarriage)
+
+```
+<br />  
+
+まずは、離婚率と結婚年齢の関係を考える。  
+以下のモデルを考える。  
+
+$D_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta_{A}A_{i}$  
+$\alpha \sim Normal(0, 0.2)$  
+$\beta_{A} \sim Normal(0, 0.05)$  
+$\sigma \sim Exponential(1)$  
+
+<br />  
+
+モデルを書く。
+```{r}
+b5.1 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = D ~ 1 + A,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.1")
+
+summary(b5.1)
+```
+<br />  
+
+事前分布からのサンプリングを行う。
+```{r}
+prior_51 <- prior_samples(b5.1)
+head(prior_51)
+
+prior_51 %>% 
+  data.frame() %>% 
+  slice_sample(n=50) %>% 
+  rownames_to_column("draw") %>% 
+  tidyr::expand(nesting(draw,Intercept,b),
+         a=c(-2,2)) %>% 
+  mutate(d = Intercept + b*a) -> prior_51
+
+prior_51 %>% 
+  ggplot(aes(x=a,y=d,group=draw))+
+  geom_line(alpha = 1/2)+
+  scale_x_continuous("Median age mariage (sd)",
+                     breaks = seq(-2,2,by=1))+
+  scale_y_continuous("Divorce rate(std)",
+                     breaks = seq(-2,2,by=1))+theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1)
+```
+<br />  
+
+各パラメータの事後分布は以下の通り。  
+```{r}
+post_51 <- posterior_samples(b5.1)
+
+bind_rows(mean_qi(post_51 %>% gather_variables()),
+          ggdist::median_hdi(post_51 %>% gather_variables())) %>% 
+  as_tibble()
+```
+
+事後分布からのサンプリングを行って回帰直線を描く。  
+結婚年齢が高いほど、離婚率も高いように見える。
+```{r}
+# 信頼区間と予測区間を作図
+A_seq <- tibble(A = seq(-3,3,length.out=100)) 
+  
+  
+fit_51 <- fitted(b5.1, newdata = A_seq) %>% 
+  as_tibble() %>% 
+  bind_cols(A_seq)
+
+predict_51 <- predict(b5.1, newdata = A_seq) %>% 
+  as_tibble() %>% 
+  bind_cols(A_seq)
+
+d %>% 
+  ggplot(aes(x=A,y=D))+
+  geom_point(size=3,alpha=1/2,shape=1,
+             color="navyblue")+
+  geom_ribbon(data = fit_51,aes(y = Estimate,
+                                ymin = Q2.5,
+                                ymax  = Q97.5),
+              fill = "black", alpha = 3/8)+
+  geom_ribbon(data = predict_51,aes(y = Estimate,
+                                ymin = Q2.5,
+                                ymax  = Q97.5),
+              fill = "black", alpha = 1/8)+
+  geom_line(data = predict_51,aes(y = Estimate,
+                                x = A))+
+  scale_x_continuous("Median age mariage (sd)",
+                     breaks = seq(-3,3,by=1))+
+  scale_y_continuous("Divorce rate(std)",
+                     breaks = seq(-3,3,by=1))+theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1) ->p1
+
+print(p1)
+```
+<br />  
+
+結婚率と離婚率に関しても同様に分析。 
+
+$D_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta_{M}M_{i}$  
+$\alpha \sim Normal(0, 0.2)$  
+$\beta_{M} \sim Normal(0, 0.05)$  
+$\sigma \sim Exponential(1)$   
+
+```{r}
+b5.2 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = D ~ 1 + M,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.2")
+
+summary(b5.2)
+```
+<br />  
+
+事後分布からのサンプリングを行って回帰直線を描く。  
+結婚率が高いほど、離婚率も高いように見える。
+```{r}
+post_52 <- posterior_samples(b5.2)
+
+bind_rows(mean_qi(post_52 %>% gather_variables()),
+          median_hdi(post_52 %>% gather_variables())) %>% 
+  as_tibble()
+
+# 信頼区間と予測区間を作図
+M_seq <- tibble(M = seq(-3,3,length.out=100)) 
+  
+  
+fit_52 <- fitted(b5.2, newdata = M_seq) %>% 
+  as_tibble() %>% 
+  bind_cols(M_seq)
+
+predict_52 <- predict(b5.2, newdata = M_seq) %>% 
+  as_tibble() %>% 
+  bind_cols(M_seq)
+
+d %>% 
+  ggplot(aes(x=M,y=D))+
+  geom_point(size=3,alpha=1/2,shape=1,
+             color="navyblue")+
+  geom_ribbon(data = fit_52,aes(y = Estimate,
+                                ymin = Q2.5,
+                                ymax  = Q97.5),
+              fill = "black", alpha = 3/8)+
+  geom_ribbon(data = predict_52,aes(y = Estimate,
+                                ymin = Q2.5,
+                                ymax  = Q97.5),
+              fill = "black", alpha = 1/8)+
+  geom_line(data = predict_52,aes(y = Estimate,
+                                x = M))+
+  scale_x_continuous("Mariage rate (sd)",
+                     breaks = seq(-3,3,by=1))+
+  scale_y_continuous("Divorce rate(std)",
+                     breaks = seq(-3,3,by=1))+theme_bw()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1) -> p2
+
+print(p2)
+
+p1|p2
+```
+<br />  
+
+これら両方は因果関係によるものだろうか？  
+3つの変数の関係をグラフィカルモデルを用いて考える。  
+<br />  
+
+### グラフを用いて因果モデルを考える
+```{r}
+dag_coords <-
+  tibble(name = c("A", "M", "D"),
+         x    = c(1, 3, 2),
+         y    = c(2, 2, 1))
+
+DAG5.1 <-
+  dagify(M ~ A,
+         D ~ A + M,
+         coords = dag_coords) 
+
+DAG5.1 %>% 
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(color = "firebrick", alpha = 1/4, size = 15) +
+  geom_dag_text(color = "firebrick") +
+  geom_dag_edges(edge_color = "firebrick") +
+  scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) ->p4
+```
+<br />  
+
+2つの因果モデルを考える。  
+```{r}
+DAG5.2 <-
+  dagify(M ~ A,
+         D ~ A ,
+         coords = dag_coords) 
+
+DAG5.2 %>% 
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(color = "firebrick", alpha = 1/4, size = 15) +
+  geom_dag_text(color = "firebrick") +
+  geom_dag_edges(edge_color = "firebrick") +
+  scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) ->p5
+
+p4|p5
+
+d %>% 
+  dplyr::select(D:A) %>% 
+  cor() %>% 
+  round(digits=3)
+```
+<br />  
+
+dagittyパッケージを用いて、条件付き独立を調べる。
+```{r}
+# DAG1
+DAG1 <- dagitty('dag{ D <- A -> M -> D}')  
+impliedConditionalIndependencies(DAG1)
+
+# DAG2
+DAG2 <- dagitty('dag{ D <- A -> M }')
+impliedConditionalIndependencies(DAG2)
+```
+<br />  
+
+DAG1は**どの変数で条件づけたとしても**、それぞれの変数が従属であることを表している。  
+一方で、DAG2は**Aで条件付けすれば**、MとDは独立であることを示している。  
+このことを検証するため、以下のモデルを検討する。DAG2が正しければ、$\beta_{M}$は0になるはずである。  
+
+<br />  
+
+$D_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta_{A}A_{i} + \beta_{M}M_{i}$   
+$\alpha \sim Normal(0, 0.2)$  
+$\beta_{A} \sim Normal(0, 0.05)$  
+$\beta_{M} \sim Normal(0, 0.05)$ 
+$\sigma \sim Exponential(1)$   
+
+モデリングする。
+```{r}
+b5.3 <- 
+  brm(data =d,
+            family = gaussian,
+            formula = D ~ 1 + A + M,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 4000, warmup = 3000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.3")
+```
+<br />  
+
+結果を見てみると、$\beta_{M}$はほとんど0に近く、DAG2と一致する。  
+```{r}
+summary(b5.3)
+
+sample_b53 <-b5.3 %>% 
+  posterior_samples()
+
+pairs(b5.3)
+
+bind_rows(mean_qi(sample_b53 %>% gather_variables()),median_hdi(sample_b53 %>% gather_variables())) %>% 
+data.frame()
+```
+<br >  
+
+b5.1~b5.3の結果を比較してみる。  
+```{r}
+bind_cols(
+  posterior_samples(b5.1) %>% 
+    transmute("b5.1_beta[A]" = b_A),
+  posterior_samples(b5.2) %>% 
+    transmute("b5.2_beta[M]" = b_M),
+  posterior_samples(b5.3) %>% 
+    transmute("b5.3_beta[M]" = b_M,
+              "b5.3_beta[A]" = b_A)
+  ) %>% 
+  pivot_longer(1:4) %>% 
+  group_by(name) %>% 
+  summarise(mean = mean(value),
+            ll = quantile(value, prob = .025),
+            ul = quantile(value, prob = .975)) %>% 
+  separate(col = name, into = c("fit","parameter"),
+           sep = "_") %>% 
+  ggplot(aes(x = mean, xmin = ll, xmax = ul, y = fit))+
+  geom_vline(xintercept = 0, color = "firebrick", alpha = 1/5)+
+  geom_pointrange(color = "firebrick") +
+  labs(x = "posterior", y = NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_wrap(~ parameter, ncol = 1, labeller = label_parsed)
+```
+
+b5.3の結果を際釈するために、3つの図を描く。  
+<br />  
+
+### Predictor residual plots  
+まず、結婚率を結婚年齢で回帰したのち、予測値と実測値の間の残差を調べる。残差は結婚率の内、結婚年齢では説明できない部分である。  
+
+以下のモデルを考える。　　
+
+$M_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta A_{i}$  
+$\alpha \sim Normal(0, 0.2)$  
+$\beta \sim Normal(0, 0.05)$  
+$\sigma \sim Exponential(1)$   
+<br />  
+
+```{r}
+b5.4 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = M ~ 1 + A,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.4")
+
+print(b5.4)  
+```
+
+残差を視覚化してみる。
+```{r}
+fit_b54 <- fitted(b5.4) %>% 
+  data.frame() %>% 
+  bind_cols(d)
+
+fit_b54 %>% 
+  ggplot(aes(x=A,y=M))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_segment(aes(xend = A, yend = Estimate),size=1/4)+
+  geom_line(aes(x=A,y=Estimate))+
+  geom_text_repel(data = . %>% filter(Loc %in% c("WY", "ND", "ME", "HI", "DC")),  
+                  aes(label = Loc), 
+                  size = 3, seed = 14)+
+  labs(x = "Age at marriage (std)",
+       y = "Marriage rate (std)")+
+  coord_cartesian(ylim = range(d$M))+
+  theme_classic()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = .95) -> p5
+  
+p5
+```
+<br />  
+
+残差と離婚率の関係を見てみる。  
+ほぼ関連はないことが分かる。
+```{r}
+red_b54 <- residuals(b5.4) %>% 
+  data.frame() %>% 
+  bind_cols(d)
+
+p6 <- 
+  red_b54 %>% 
+  ggplot(aes(x=Estimate,y=D))+
+  geom_point(color="navyblue",size=3,shape=1)+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  geom_smooth(method = "lm", color = "black",size=1/2)+
+  theme_classic()+
+  geom_text_repel(data = . %>% filter(Loc %in% c("WY", "ND", "ME", "HI", "DC")),  
+                  aes(label = Loc), 
+                  size = 3, seed = 14)+
+  theme(aspect.ratio=1)+
+  labs(x = "Marriage rate residuals",
+       y = "Divorce rate (std)")
+  
+p6
+```
+<br />  
+
+今度は、結婚年齢を結婚率で回帰して同様の作図をしてみる。  
+
+```{r}
+b5.5 <- 
+  brm(data = d,
+      family = gaussian,
+      formula = A ~ 1 + M,
+      prior = c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.5")
+
+print(b5.5)  
+```
+
+残差を視覚化してみる。
+```{r}
+fit_b55 <- fitted(b5.5) %>% 
+  data.frame() %>% 
+  bind_cols(d)
+
+fit_b55 %>% 
+  ggplot(aes(x=M,y=A))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_segment(aes(xend = M, yend = Estimate),size=1/4)+
+  geom_line(aes(x=M,y=Estimate))+
+  geom_text_repel(data = . %>% filter(Loc %in% c( "ND",  "HI", "DC")),  
+                  aes(label = Loc), 
+                  size = 3, seed = 14)+
+  labs(y = "Age at marriage (std)",
+       x = "Marriage rate (std)")+
+  coord_cartesian(ylim = range(d$M))+
+  theme_classic()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = .95) -> p7
+  
+p7
+```
+<br />  
+
+残差と離婚率の関係を見てみる。  
+今度は、関連がみられることが分かる。
+```{r}
+red_b55 <- residuals(b5.5) %>% 
+  data.frame() %>% 
+  bind_cols(d)
+
+p8 <- 
+  red_b55 %>% 
+  ggplot(aes(x=Estimate,y=D))+
+  geom_point(color="navyblue",size=3,shape=1)+
+  geom_vline(xintercept = 0, linetype = "dashed")+
+  geom_smooth(method = "lm", color = "black",size=1/2)+
+  theme_classic()+
+  geom_text_repel(data = . %>% filter(Loc %in% c( "ND",  "HI", "DC")),  
+                  aes(label = Loc), 
+                  size = 3, seed = 14)+
+  theme(aspect.ratio=1)+
+  labs(x = "Age at marriage residuals",
+       y = "Divorce rate (std)")
+  
+p8
+
+p5 + p6 + p7 + p8 + plot_annotation(title = "Understanding multiple regression through residuals")
+```
+
+### Posterior prediction plots  
+モデルの予測値が実測値とどの程度一致しているのかを確認する。  
+```{r}
+fitted(b5.3, prob = c(.055,.945)) %>% 
+  data.frame() %>%
+  mutate_all(~.*sd(d$Divorce) + mean(d$Divorce)) %>% 
+  bind_cols(d) %>% 
+  ggplot(aes(x=Divorce,y=Estimate,ymin = Q5.5, 
+             ymax = Q94.5))+
+  geom_point(color="navyblue",size=2)+
+  geom_abline(linetype=2, size=1/2, color="grey")+
+  geom_linerange(size=1/4, color = "navyblue", alpha=2/3)+
+  geom_text(data = . %>% filter(Loc %in% c("ID", "UT", "RI", "ME")),
+            aes(label = Loc),
+            hjust=1,nudge_x=-0.25)+
+  labs(x = "Observed divorce", y = "Predicted divorce") +
+  theme_classic() +
+  theme(panel.grid = element_blank(),
+        aspect.ratio=1)
+```
+<br />  
+
+### Counterfactual plot  
+反事実を用いて因果関係を推論する。　　
+ここで、もう一度DAG1を考える。
+```{r}
+p4
+```
+<br />  
+
+このDAGが正しいと仮定するときのモデルを考え、どのような予測が得られるかを調べる。  
+b4.3と異なり、AがMに与える影響も同時にモデリングする。  
+```{r}
+D_model <- bf(D ~ 1 + A + M)
+M_model <- bf(M ~ 1 + A)
+
+b5.6 <- 
+  brm(data =d,
+            family = gaussian,
+            D_model + M_model + set_rescor(FALSE),
+            prior= c(prior(normal(0,0.2),class=Intercept, resp = D),
+                prior(normal(0,0.5),class=b, resp =D),
+                prior(exponential(1),class=sigma, resp=D),
+                prior(normal(0,0.2),class=Intercept, resp = M),
+                prior(normal(0,0.5),class=b, resp =M),
+                prior(exponential(1),class=sigma, resp=M)
+                ),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.6")
+
+summary(b5.6)
+summary(b5.4)
+
+fixef(b5.4)
+fixef(b5.6)
+```
+<br />  
+
+Aの値を動かしたときにどうなるかをシミュレートする。  
+```{r}
+A_seq <- tibble(A = seq(-2,2,length.out=50),
+                M = 0)
+
+
+# Dについて
+pred <- predict(b5.6, 
+             newdata = A_seq) %>% 
+          data.frame() %>% 
+          bind_cols(A_seq)
+
+p1 <- 
+  pred %>%
+  ggplot(aes(x=A,y = Estimate.D,ymin = Q2.5.D,ymax=Q97.5.D))+
+  geom_line(size=0.5)+
+  geom_ribbon(fill = "black", alpha = 1/4)+
+  labs(subtitle = "Total counterfactual effect of A on D",
+       x = "manipulated A",
+       y = "counterfactual D") +
+  coord_cartesian(ylim = c(-2, 2)) +
+  theme_classic() +
+  theme(panel.grid = element_blank(),
+        aspect.ratio=1) 
+  
+p1
+
+p2 <- 
+  pred %>%
+  ggplot(aes(x=A,y = Estimate.M,ymin = Q2.5.M,ymax=Q97.5.M))+
+  geom_line(size=0.5)+
+  geom_ribbon(fill = "black", alpha = 1/4)+
+  labs(subtitle = "Total counterfactual effect of A on D",
+       x = "manipulated A",
+       y = "counterfactual M") +
+  coord_cartesian(ylim = c(-2, 2)) +
+  theme_classic() +
+  theme(panel.grid = element_blank(),
+        aspect.ratio=1) 
+  
+p1+p2+ plot_annotation(title = "Counterfactual plots for the multivariate divorce model")
+```
+<br />  
+
+20歳から30歳に上がった時に期待値がどの程度変化するかもシミュレートできる。  
+```{r}
+A_seq_2 <- tibble(A = (c(20,30)-26.1)/1.24,
+                  M = 0)
+
+predict(b5.6, newdata = A_seq_2, resp="D",summary=F) %>% 
+  data.frame() %>% 
+  set_names("a20","a30") %>% 
+  mutate(diff = a30 - a20) %>% 
+  summarise(mean = mean(diff))
+```
+
+次に、Mを動かしたときにDがどのように変化するかを調べる。このとき、Mを操作するので、A->Mの因果は消えることになる。
+```{r}
+DAG5.3 <-
+  dagify(D ~ M,
+         D ~ A ,
+         coords = dag_coords) 
+
+DAG5.3 %>% 
+  ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_point(color = "firebrick", alpha = 1/4, size = 15) +
+  geom_dag_text(color = "firebrick") +
+  geom_dag_edges(edge_color = "firebrick") +
+  scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+<br />  
+
+シミュレートする。
+```{r}
+seq_M <- tibble(M = seq(-2,2,length.out=50),
+                A = 0)
+
+pred_D <- predict(b5.6, newdata = seq_M, 
+                  resp = "D") %>%
+  　　　　data.frame() %>% 
+          bind_cols(seq_M)
+
+pred_D %>%
+  ggplot(aes(x=M,y = Estimate,ymin = Q2.5,ymax=Q97.5))+
+  geom_line(size=0.5)+
+  geom_ribbon(fill = "black", alpha = 1/4)+
+  labs(subtitle = "Total counterfactual effect of M on D",
+       x = "manipulated M",
+       y = "counterfactual D") +
+  coord_cartesian(ylim = c(-2, 2)) +
+  theme_classic() +
+  theme(panel.grid = element_blank(),
+        aspect.ratio=1) 
+```
+<br />  
+
+predict関数を使わずにやると...
+```{r}
+post <- 
+  posterior_samples(b5.6) %>% 
+  mutate(iter = 1:n()) %>% 
+  dplyr::select(-lp__, -starts_with("prior")) %>% 
+  tidyr::expand(nesting(iter, b_M_Intercept, b_M_A, sigma_M, b_D_Intercept, b_D_A, b_D_M, sigma_D), A = seq(-2,2,length.out=30)) %>% 
+  mutate(M_sim = rnorm(n(), 
+                       mean = b_M_Intercept+b_M_A*A,
+                       sd = sigma_M)) %>% 
+  mutate(D_sim = rnorm(n(), 
+                       mean = b_D_Intercept+b_D_A*A+
+                              b_D_M*M_sim,
+                       sd = sigma_D)) %>% 
+  pivot_longer(ends_with("sim")) %>% 
+  group_by(A,name) %>% 
+  summarise(mean = mean(value),
+            ll = quantile(value,prob=.025),
+            ul = quantile(value,prob=.975))
+
+```
+
+<br />  
+
+## Masked relationship  
+
+2つ以上の説明変数を用いることで、見えにくい因果関係を明らかにすることができることがある。  
+ここでは、霊長類の母乳1グラム当たりのカロリー（K）とメスの体重（M）、大脳新皮質の割合（N）の関係を調べ、大脳新皮質の割合が高いほど母乳の栄養価が高いのかを調べる。  
+
+```{r}
+data(milk)
+d2 <- milk
+rm(milk)
+
+head(d2)
+```
+
+
+```{r}
+# 標準化
+d2 <- d2 %>% 
+  dplyr::select(kcal.per.g, mass, neocortex.perc) %>% 
+  rename(cal = kcal.per.g,neo =neocortex.perc) %>% 
+  mutate(K = scale(cal), M = scale(log(mass)), 
+         N = scale(neo))
+
+```
+<br />  
+
+ぱっと見たところ、関係があるのかは分かりづらい。
+```{r}
+d2 %>% 
+  dplyr::select(cal, mass,neo) %>% 
+  pairs()
+
+
+d2_2 <-
+  d2 %>%
+  drop_na(ends_with("_s"))
+```
+<br />  
+
+### K ~ Nモデル
+まずは、KとNだけの関係を考慮した単純なモデルを考える。  
+$K_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta_{N}N_{i}$  
+$\alpha \sim Normal(0, 1)$  
+$\beta_{N} \sim Normal(0, 1)$  
+<br />  
+
+```{r}
+b5.7_draft <- 
+  brm(data = d2_2,
+      family = gaussian,
+      formula = K ~ 1 + N,
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,cores = 4,
+      seed = 5,
+      sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.7_draft")
+
+print(b5.7_draft)
+pairs(b5.7_draft)
+```  
+<br />  
+
+事前分布が適切かを考える。  
+かなり実際とはかけ離れていそう。
+```{r}
+prior_samples(b5.7_draft, summary = FALSE) %>% 
+  data.frame() %>% 
+  dplyr::select(1:2) %>% 
+  slice_sample(n=50) %>%
+  mutate(iter = 1:n()) %>% 
+  tidyr::expand(nesting(Intercept, b, iter), 
+         N = c(-2,2)) %>% 
+  mutate(K = Intercept + b*N) %>% 
+  ggplot(aes(x=N, y = K))+
+  geom_line(aes(group = iter),
+              color = "grey33", alpha = 3/4)+
+  scale_x_continuous("neocortex percent (std)",
+                     breaks = seq(-2,2,by=1))+
+  scale_y_continuous("kilocal per g (std)",
+                     breaks = seq(-2,2,by=1))+
+  coord_cartesian(ylim = c(-2,2))+
+  theme_classic()+
+  labs(subtitle = "a ~ dnorm(0,1)\nb = dnorm(0,1)")+
+  theme(aspect.ratio=1) -> p9
+
+p9
+```
+<br />  
+
+もう少し事前分布の幅を小さくしてみる。  
+今度はよさそう。
+```{r}
+b5.7_t <- 
+  brm(data = d2_2,
+      family = gaussian,
+      formula = K ~ 1 + N,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0,0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,cores = 4,
+      seed = 5,
+      sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.7_t")
+
+print(b5.7_t)
+print(b5.7_draft)
+
+prior_samples(b5.7_t, summary = FALSE) %>% 
+  data.frame() %>% 
+  dplyr::select(1:2) %>% 
+  slice_sample(n=50) %>%
+  mutate(iter = 1:n()) %>% 
+  tidyr::expand(nesting(Intercept, b, iter), 
+         N = c(-2,2)) %>% 
+  mutate(K = Intercept + b*N) %>% 
+  ggplot(aes(x=N, y = K))+
+  geom_line(aes(group = iter),
+              color = "grey33", alpha = 3/4)+
+  scale_x_continuous("neocortex percent (std)",
+                     breaks = seq(-2,2,by=1))+
+  scale_y_continuous("kilocal per g (std)",
+                     breaks = seq(-2,2,by=1))+
+  coord_cartesian(ylim = c(-2,2))+
+  theme_classic()+
+  labs(subtitle = "a ~ dnorm(0,0.2)\nb = dnorm(0,5)")+
+  theme(aspect.ratio=1)　-> p10
+
+p10
+
+p9|p10
+```
+
+<br />  
+
+推定結果も少し異なり、b5.7_tの方がより事後分布の標準偏差が小さくなっている。  
+```{r}
+bind_rows(
+  posterior_samples(b5.7_draft) %>% dplyr::select(b_Intercept:sigma),
+  posterior_samples(b5.7_t) %>% dplyr::select(b_Intercept:sigma)
+  )  %>% 
+  mutate(fit = rep(c("b5.5_draft", "b5.5_t"), each = n() / 2)) %>% 
+  pivot_longer(-fit) %>% 
+  group_by(name, fit) %>% 
+  summarise(mean = mean(value),
+            ll = quantile(value, prob = .025),
+            ul = quantile(value, prob = .975)) %>% 
+  mutate(fit = factor(fit, levels = c("b5.5_draft", "b5.5_t"))) %>% 
+  
+  # plot
+  ggplot(aes(x = mean, y = fit, xmin = ll, xmax = ul)) +
+  geom_pointrange(color = "firebrick") +
+  geom_hline(yintercept = 0, color = "firebrick", alpha = 1/5) +
+  labs(x = "posterior", 
+       y = NULL) +
+  theme_bw() +
+  theme(axis.text.y = element_text(hjust = 0),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank(),
+        strip.background = element_blank()) +
+  facet_wrap(~ name, ncol = 1)
+```
+<br />  
+
+事後分布から信用区間と予測区間を作図。  
+かなり微妙な変化...。
+```{r}
+seq_N <- tibble(N=seq(-2,2,length.out = 100))
+
+fit_b57 <- fitted(b5.7_t, 
+                  newdata = seq_N,
+                  prob = c(.055,.945)) %>%
+           data.frame() %>% 
+           bind_cols(seq_N)
+
+predict_b57 <- predict(b5.7_t, 
+                  newdata = seq_N,
+                  prob = c(.055,.945)) %>%
+           data.frame() %>% 
+           bind_cols(seq_N)
+
+d2_2 %>% 
+  ggplot(aes(x=N,y=K))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_ribbon(data = fit_b57,aes(y = Estimate,
+                                ymin = Q5.5,
+                                ymax  = Q94.5),
+              fill = "black", alpha = 3/8)+
+  geom_ribbon(data = predict_b57,aes(y = Estimate,
+                                ymin = Q5.5,
+                                ymax  = Q94.5),
+              fill = "black", alpha = 1/8)+
+  geom_line(data = fit_b57,aes(y = Estimate,
+                                x = N))+
+  scale_x_continuous("neocortex percent (std)",
+                     breaks = seq(-2,2,by=1))+
+  scale_y_continuous("kilocal per g (std)",
+                     breaks = seq(-1,2,by=1))+
+  theme_classic()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1) -> p11
+
+p11  
+```
+<br />　　
+
+### K ~ Mモデル
+
+次に、メスの体重(M)と母乳のカロリー（K）の関係を考える。　　
+
+```{r}
+b5.8_t <- 
+  brm(data = d2_2,
+      family = gaussian,
+      formula = K ~ 1 + M,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0,0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains = 4,cores = 4,
+      seed = 5,
+      sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.8_t")
+
+print(b5.8_t)
+```
+<br />  
+
+強くはないが、負の関係がありそう？  
+
+```{r}
+seq_M <- tibble(M=seq(-2,2,length.out = 100))
+
+fit_b58 <- fitted(b5.8_t, 
+                  newdata = seq_M,
+                  prob = c(.055,.945)) %>%
+           data.frame() %>% 
+           bind_cols(seq_M)
+
+predict_b58 <- predict(b5.8_t, 
+                  newdata = seq_M,
+                  prob = c(.055,.945)) %>%
+           data.frame() %>% 
+           bind_cols(seq_M)
+
+d2_2 %>% 
+  ggplot(aes(x=M,y=K))+
+  geom_point(size=3,shape=1,color="navyblue")+
+  geom_ribbon(data = fit_b58,aes(y = Estimate,
+                                ymin = Q5.5,
+                                ymax  = Q94.5),
+              fill = "black", alpha = 3/8)+
+  geom_ribbon(data = predict_b58,aes(y = Estimate,
+                                ymin = Q5.5,
+                                ymax  = Q94.5),
+              fill = "black", alpha = 1/8)+
+  geom_line(data = fit_b58,aes(y = Estimate,
+                                x = M))+
+  scale_x_continuous("log body mass (std)",
+                     breaks = seq(-2,2,by=1))+
+  scale_y_continuous("kilocal per g (std)",
+                     breaks = seq(-1,2,by=0.5))+
+  coord_cartesian(ylim=c(-1,2))+
+  theme_classic()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1) -> p12
+p12
+
+(p11|p12)
+```
+<br />  
+
+### K ~ N + Mモデル
+それでは、両方の説明変数を入れるモデルを考える。  
+モデル式は以下の通り。  
+
+$K_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta_{N}N_{i}+\beta_{M}M_{i}$ 
+$\alpha \sim Normal(0, 0.2)$  
+$\beta_{N} \sim Normal(0, 0.5)$  
+$\beta_{M} \sim Normal(0, 0.5)$
+$\sigma \sim Exponential(1)$  
+
+```{r}
+b5.9 <- 
+  brm(data = d2_2,
+      family = gaussian,
+      formula = K ~ 1 + N + M,
+      prior = c(prior(normal(0,0.2),class = Intercept),
+                prior(normal(0,0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000, warmup = 1000, chains =4,cores = 4,
+      seed = 5,
+      sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.9")
+```
+
+<br />  
+
+それぞれNは強く正の方向に、Mは強く負の方向に影響を与えている。  
+2変数を入れたことによって効果が強まったよう。
+<br />  
+
+```{r}
+print(b5.9)
+```
+
+<br />  
+
+上記2つのモデルと比較しても一目瞭然である。  
+```{r}
+bind_cols(
+  posterior_samples(b5.7_t) %>% 
+    transmute(`b5.5_beta[N]` = b_N),
+  posterior_samples(b5.8_t) %>% 
+    transmute(`b5.6_beta[M]` = b_M),
+  posterior_samples(b5.9) %>% 
+    transmute(`b5.7_beta[N]` = b_N,
+              `b5.7_beta[M]` = b_M)
+  ) %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  summarise(mean = mean(value),
+            ll   = quantile(value, prob = .025),
+            ul   = quantile(value, prob = .975)) %>% 
+  separate(name, into = c("fit", "parameter"), sep = "_") %>% 
+  # complete(fit, parameter) %>% 
+  
+  ggplot(aes(x = mean, y = fit, xmin = ll, xmax = ul)) +
+  geom_pointrange(color = "firebrick") +
+  geom_hline(yintercept = 0, color = "firebrick", alpha = 1/5) +
+  ylab(NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_wrap(~ parameter, ncol = 1, labeller = label_parsed)
+```
+
+<br />  
+
+この結果をどのように解釈すべきだろうか？  
+これは、NとMがそれぞれKに対して反対方向に影響を与えていて、かつNとMが正に相関していたため、それぞれがKに与える影響が打ち消しあっていたと考えられる。
+```{r}
+pairs(~K+M+N, d2_2)
+
+library(GGally)
+
+na.omit(d2) %>% 
+  dplyr::select(K,M,N)%>%
+  mutate_all(~ as.numeric(.)) %>% 
+  ggpairs()
+```
+
+<br />  
+
+グラフィカルモデルを使って考える。  
+結果に合致するグラフは3通り考えられるが、データからは区別することはできない（Marcov equivalence）。   
+
+```{r}
+gg_dag <- function(d) {
+  
+  d %>% 
+    ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+    geom_dag_point(color = "firebrick", alpha = 1/4, size = 10) +
+    geom_dag_text(color = "firebrick") +
+    geom_dag_edges(edge_color = "firebrick") +
+    scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+    scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+}
+
+dag_coords <-
+  tibble(name = c("M", "N", "K"),
+         x    = c(1, 3, 2),
+         y    = c(2, 2, 1))
+
+p1 <-
+  dagify(N ~ M,
+         K ~ M + N,
+         coords = dag_coords) %>%
+  gg_dag()
+
+# middle DAG
+p2 <-
+  dagify(M ~ N,
+         K ~ M + N,
+         coords = dag_coords) %>%
+  gg_dag()
+
+# right DAG
+dag_coords <-
+  tibble(name = c("M", "N", "K", "U"),
+         x    = c(1, 3, 2, 2),
+         y    = c(2, 2, 1, 2))
+p3 <-
+  dagify(M ~ U,
+         N ~ U,
+         K ~ M + N,
+         coords = dag_coords) %>%
+  gg_dag() +
+  geom_point(x = 2, y = 2,
+             shape = 1, size = 10, stroke = 1.25, color = "firebrick4")
+
+p1+p2+p3
+
+```
+
+<br />  
+  
+### Counterfactual plot を描く
+```{r}
+# K ~ N
+seq_N <- tibble(N =seq(-2,2,length.out=50),
+                M = 0)
+
+predict_b59_N <- fitted(b5.9, 
+                         newdata = seq_N,
+                         prob = c(.055, .945)) %>%
+                 data.frame() %>% 
+                 bind_cols(seq_N)
+                 
+predict_b59_N %>% 
+  ggplot(aes(x=N, y= Estimate, 
+             ymin = Q5.5, ymax = Q94.5))+
+  geom_line()+
+  geom_ribbon(alpha = 1/7, fill = "black")+
+  scale_x_continuous("neocortex percent (std)",
+                     breaks = seq(-2,1.5,by=0.5))+
+  scale_y_continuous("kilocal per g (std)",
+                     breaks = seq(-1,2,by=0.5))+
+  coord_cartesian(ylim=c(-1,2))+
+  theme_classic()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1) -> p13
+
+
+# K ~ M
+seq_M <- tibble(M =seq(-2,2,length.out=50),
+                N = 0)
+
+predict_b59_M <- fitted(b5.9, 
+                         newdata = seq_M,
+                         prob = c(.055, .945)) %>%
+                 data.frame() %>% 
+                 bind_cols(seq_M)
+                 
+predict_b59_M %>% 
+  ggplot(aes(x=M, y= Estimate, 
+             ymin = Q5.5, ymax = Q94.5))+
+  geom_line()+
+  geom_ribbon(alpha = 1/7, fill = "black")+
+  scale_x_continuous("neocortex percent (std)",
+                     breaks = seq(-2,2,by=1))+
+  scale_y_continuous("kilocal per g (std)",
+                     breaks = seq(-1,2,by=0.5))+
+  coord_cartesian(ylim=c(-1,2))+
+  theme_classic()+
+  theme(panel.grid = element_blank(),
+        aspect.ratio = 1) -> p14
+
+p13+p14+
+  plot_annotation(title = "Figure 5.9 [bottom row]. Milk energy and neocortex among primates.")
+```  
+
+<br />  
+
+### Overthinking  
+Marcov evuivalentなグラフィカルモデルはどれ？
+```{r}
+dag5.7 <- dagitty("dag{ M -> K <- N M -> N }" )
+
+coordinates(dag5.7) <- list(x = c(M = 0, K = 1, N =2), 　　　　　　　　　　　　　　y=c(M =0.5,K = 1,N = 0.5)) 
+ggdag_equivalent_dags(dag5.7)
+```
+<br />  
+ 
+## Categorical variables  
+### Two categories
+
+説明変数に質的変数を含む場合を考える。  
+再びクンサン族のデータを考える。  
+```{r}
+data(Howell1)
+d3 <- Howell1
+
+str(d3)
+```
+
+<br />  
+
+まずは、身長が性別によって違うというモデルを考える。
+<br />  
+
+$h_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha + \beta_{M}m_{i}$  
+$\alpha \sim Normal(178, 20)$  
+$\beta_{M} \sim Normal(0, 10)$  
+$\sigma \sim Exponential(1)$  
+
+<br />  
+
+しかし、このモデルでは、男女の事前分布で違いが出てきてしまう（男は$\alpha$と$\beta_{M}$という2つのパラメータを使っているため）。  
+
+```{r}
+mu_f <- rnorm(1e4, 178,20) # alphaに相当
+mu_m <- rnorm(1e4, 178,20) + rnorm(1e4,0,10) 
+
+precis(data.frame(mu_f,mu_m),hist = F)
+
+```
+<br />  
+
+そこで、以下のモデルを考える。  
+$h_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} \sim \alpha_{SEX[i]}$  
+$\alpha_{j} \sim Normal(178, 20)\;\; for\,j=1,2$  
+$\sigma \sim Exponential(1)$ 
+
+```{r}
+d3 <- d3 %>% 
+  mutate(sex = factor(ifelse(male==1,2,1)))
+
+str(d3)
+```
+<br />  
+
+brmsでモデリングする。
+```{r}
+b5.10 <- brm(
+  data = d3,
+  family = gaussian,
+  formula = height ~ 0 + sex,
+  prior = c(prior(normal(178, 20), class = b),
+                prior(exponential(1), class = sigma)),
+  iter = 2000, warmup = 1000, chains = 4, cores = 4,
+      seed = 5,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.10_2"
+)
+
+print(b5.10)
+
+#posterior_samples(b5.10,summary=F) %>% 
+  #data.frame() %>% 
+  #mutate(diff = b_sex1 - b_sex2) %>% 
+  #dplyr::select(-lp__) %>% 
+  #map_df(mean_qi, .width = .89)
+```
+
+<br />  
+
+### Many Categories  
+複数のカテゴリーがある場合を考える。  
+
+```{r}
+data(milk)
+d4 <- milk
+str(milk)
+
+d4 %>% 
+  distinct(clade)
+
+```
+
+```{r}
+d4 <- 
+  d4 %>% 
+  mutate(K = scale(kcal.per.g))
+```
+<br />  
+
+以下のモデルを考える。  
+$K_{i} \sim Normal(\mu_{i}, \sigma)$  
+$\mu_{i} = \alpha_{clade[i]}$  
+$\alpha_{j} \sim Normal(0, 0.5)$  
+$\sigma \sim Exponential(1)$  
+
+```{r}
+b5.11 <- 
+  brm(data=d4,
+      family = gaussian,
+      formula = K ~ 0 + clade,
+      prior = c(prior(normal(0, 0.5), class = b),
+                prior(exponential(1), class = sigma)),
+      iter = 2000,warmup = 1000,chains = 4, cores = 4,
+      seed = 5,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b5.11")
+
+mcmc_plot(b5.11, pars = "^b")
+
+library(bayesplot)
+library(ggmcmc)
+
+posterior_samples(b5.11) %>% 
+  dplyr::select(starts_with("b_")) %>% 
+  mcmc_intervals(prob = .5, prob_outer=.89)+
+  labs(title = "My fancy bayesplot-based coefficient plot") +
+  theme_bw() +
+  theme(axis.text.y = element_text(hjust = 0),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank())
+```
+
+<br />  
+
+## Practice
+### 5M1  
+> Invent your own example of a spurious correlation. An outcome variable should be correlated with both predictor variables. But when both predictors are entered in the same model, the correlation between the outcome and one of the predictors should mostly vanish (or at least be greatly reduced).  
+
+気温（T）とアイスクリームの売り上げ（I）、プールでの死亡事故の件数（P）の関係を考える。  
+想定する因果関係は以下の通り。
+```{r}
+gg_dag <- function(d) {
+  d %>% 
+    ggplot(aes(x = x, y = y, xend = xend, yend = yend)) +
+    geom_dag_point(color = "firebrick", alpha = 1/4, size = 10) +
+    geom_dag_text(color = "firebrick") +
+    geom_dag_edges(edge_color = "firebrick") +
+    scale_x_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+    scale_y_continuous(NULL, breaks = NULL, expand = c(.1, .1)) +
+    theme_bw() +
+    theme(panel.grid = element_blank())
+}
+
+dag_coords <-
+  tibble(name = c("T", "I", "P"),
+         x    = c(1, 3, 2),
+         y    = c(2, 2, 1))
+
+  dagify(I ~ T,
+         P ~ T,
+         coords = dag_coords) %>%
+  gg_dag()
+```
+
+<br />  
+
+シミュレーションする。  
+IとPの間には正の相関がある
+```{r}
+n <- 100
+
+T <- rnorm(n, 25, 5)
+I <- rnorm(n,0.5*T+4, 2)
+P <- rnorm(n,0.3*T+2, 3)
+
+d <- tibble(T = T, I=I, P=P)
+
+pairs(d)
+
+d %>% 
+  ggplot(aes(x=I, y = P))+
+  geom_point()+
+  geom_smooth(method = "lm", color="black")+
+  theme_classic()+
+  theme(panel.grid=element_blank(),aspect.ratio=1)
+
+cor.test(d$I,d$P)
+```
+
+<br />  
+
+モデルを考える。
+```{r}
+modIT <- brm(data = d,
+              family=gaussian,
+              formula = I ~ 1+T,
+              prior =
+              c(prior(normal(0,10),class=Intercept),
+              prior(normal(0,10),class= b)),
+              iter=4000,warmup=3000,chains=4,seed=4,
+              backend = "cmdstanr",
+              file = "output/Chapter5/mod_IT"
+              )
+
+modIP <- brm(data = d,
+              family=gaussian,
+              formula = I ~ 1+P,
+              prior =
+              c(prior(normal(0,10),class=Intercept),
+              prior(normal(0,10),class= b)),
+              iter=4000,warmup=3000,chains=4,seed=4,
+              backend = "cmdstanr",
+              file = "output/Chapter5/mod_IP"
+              )
+
+modIPT <- brm(data = d,
+              family=gaussian,
+              formula = I ~ 1+P+T,
+              prior =
+              c(prior(normal(0,10),class=Intercept),
+              prior(normal(0,10),class= b)),
+              iter=4000,warmup=3000,chains=4,seed=4,
+              backend = "cmdstanr",
+              file = "output/Chapter5/mod_IPT"
+              )
+```
+<br />  
+
+結果を見てみる。
+```{r}
+print(modIT)
+print(modIP)
+print(modIPT)
+
+bind_cols(
+  posterior_samples(modIT) %>% 
+    transmute("modIT_[T]"= b_T),
+  posterior_samples(modIP) %>% 
+    transmute("modIP_[P]" = b_P),
+  posterior_samples(modIPT) %>% 
+    transmute("modIPT_[T]" = b_T,
+              "modIPT_[P]" = b_P)
+  ) %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  summarise(mean = mean(value),
+            ll   = quantile(value, prob = .025),
+            ul   = quantile(value, prob = .975)) %>% 
+  separate(name, into = c("fit", "parameter"), sep = "_") %>% 
+  ggplot(aes(x = mean, y = fit,xmin = ll,xmax = ul)) +
+  geom_pointrange(color = "firebrick") +
+  geom_hline(yintercept = 0, color = "firebrick", alpha = 1/5) +
+  ylab(NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_wrap(~ parameter, ncol = 1)
+```  
+<br />  
+
+### 5M2  
+> Invent your own example of a masked relationship. An outcome variable should be correlated with both predictor variables, but in opposite directions. And the two predictor variables should be correlated with one another.  
+
+自分への信頼（C）と勉強時間（S）、慢心（M）、成績（G）の関係を考える。  
+想定する因果関係は以下の通り。  
+```{r}
+dag_coords <-
+  tibble(name = c("S", "M", "G", "C"),
+         x    = c(1, 3, 2, 2),
+         y    = c(2, 2, 1, 2))
+
+  dagify(S ~ C,
+         M ~ C,
+         G ~ S + M,
+         coords = dag_coords) %>%
+  gg_dag() +
+  geom_point(x = 2, y = 2,
+             shape = 1, size = 10, stroke = 1.25, color = "firebrick4")
+```
+
+<br />  
+
+シミュレートする。
+```{r}
+n <- 100
+
+C <- rnorm(n)
+S <- rnorm(n, 1.2*C , 0.4)
+M <- rnorm(n, 1.0*C , 0.3)
+G <- rnorm(n, 0.5*S - 0.6*M , 0.8)
+
+d2 <- tibble(S = S, M = M, G = G)
+
+pairs(d2)
+
+cor(d2)
+cor.test(d2$S,d2$G)
+```
+
+<br />  
+
+モデリング。  
+```{r}
+modGS  <- brm(data = d2,
+              family=gaussian,
+              formula = G ~ 1+S,
+              prior =
+              c(prior(normal(0,1),class=Intercept),
+              prior(normal(0,1),class= b)),
+               iter=4000,warmup=3000,chains=4,seed=4,
+               backend = "cmdstanr",
+              file = "output/Chapter5/modGS"
+              )
+
+modGM <- brm(data = d2,
+              family=gaussian,
+              formula = G ~ 1+M,
+              prior =
+              c(prior(normal(0,1),class=Intercept),
+              prior(normal(0,1),class= b)),
+              iter=4000,warmup=3000,chains=4,seed=4,
+              backend = "cmdstanr",
+              file = "output/Chapter5/modGM"
+              )
+
+modGSM <- brm(data = d2,
+              family=gaussian,
+              formula = G ~ 1+S + M,
+              prior =
+              c(prior(normal(0,1),class=Intercept),
+              prior(normal(0,1),class= b)),
+              iter=4000,warmup=3000,chains=4,seed=4,
+              backend = "cmdstanr",
+              file = "output/Chapter5/modGSM"
+              )
+
+```
+
+```{r}
+print(modGM)
+print(modGS)
+print(modGSM)
+
+bind_cols(
+  posterior_samples(modGS) %>% 
+    transmute("modGS_[S]"= b_S),
+  posterior_samples(modGM) %>% 
+    transmute("modGM_[M]" = b_M),
+  posterior_samples(modGSM) %>% 
+    transmute("modGSM_[S]" = b_S,
+              "modGSM_[M]" = b_M)
+  ) %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  summarise(mean = mean(value),
+            ll   = quantile(value, prob = .025),
+            ul   = quantile(value, prob = .975)) %>% 
+  separate(name, into = c("fit", "parameter"), sep = "_") %>% 
+  ggplot(aes(x = mean, y = fit,xmin = ll,xmax = ul)) +
+  geom_pointrange(color = "firebrick") +
+  geom_hline(yintercept = 0, color = "firebrick", alpha = 1/5) +
+  ylab(NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        strip.background = element_rect(fill = "transparent", color = "transparent")) +
+  facet_wrap(~ parameter, ncol = 1)
+```
+
+<br />  
+
+### 5M4  
+> In the divorce data, States with high numbers of members of the Church of Jesus Christ of Latter-day Saints (LDS) have much lower divorce rates than the regression models expected. Find a list of LDS population by State and use those numbers as a predictor variable, predicting divorce rate using marriage rate, median age at marriage, and percent LDS population (possibly standardized). You may want to consider transformations of the raw percent LDS variable.  
+
+```{r}
+data("WaffleDivorce")
+
+lds <- read_csv("data/lds-data.csv")
+
+lds <- 
+lds %>% 
+  mutate(ldsrate = log(members/population)) %>% 
+  dplyr::select(state, ldsrate) %>% 
+  rename(Location = state)
+
+lds %>% 
+  ggplot(aes(x=ldsrate))+
+  geom_histogram()
+
+d4 <- 
+  WaffleDivorce %>% 
+  left_join(lds, by = "Location") %>% 
+  dplyr::select(MedianAgeMarriage, Divorce, Marriage,ldsrate,South) %>% 
+  mutate(across(1:4,standardize)) %>% 
+  rename(A = MedianAgeMarriage,
+         D = Divorce,
+         M = Marriage,
+         S=South,
+         L = ldsrate)
+
+datatable(d4)
+```
+
+
+```{r}
+pairs(d4)
+```
+
+<br />  
+
+modelling
+```{r}
+b.5M4 <- 
+  brm(data = d4,
+            family = gaussian,
+            formula = D ~ 1 + A + M + L,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      backend = "cmdstanr",
+      chains = 4, sample_prior = T,
+      file = "output/Chapter5/b.5M4")
+
+print(b.5M4)
+
+b.5M4_2 <- brm(data = d4,
+            family = gaussian,
+            formula = M ~ 1 + A + L,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5M4_2")
+
+print(b.5M4_2)
+
+b.5M4_3<- brm(data = d4,
+            family = gaussian,
+            formula = A ~ 1 + M + L,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5M4_3")
+
+print(b.5M4_3)
+
+b.5M4_4<- brm(data = d4,
+            family = gaussian,
+            formula = L ~ 1 + A + M,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5M4_4")
+
+print(b.5M4_4)
+
+b.5M4_5<- brm(data = d4,
+            family = gaussian,
+            formula = M ~ 1 + A + L + D,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5M4_5")
+
+print(b.5M4_5)
+
+# all
+b1 <- bf(D ~ 1 + A + L)
+b2 <- bf(M ~ 1 + A + L)
+b3 <- bf(A ~ 1 + L)
+
+b.5M4_all<- brm(data = d4,
+            family = gaussian,
+            formula = b1 + b2 +b3+ set_rescor(FALSE),
+            prior= c(prior(normal(0,0.2),class=Intercept, resp = D),
+                prior(normal(0,0.5),class=b,resp=D),
+                prior(exponential(1),class=sigma,resp=D),
+                prior(normal(0,0.2),class=Intercept,resp=A),
+                prior(normal(0,0.5),class=b,resp=A),
+                prior(exponential(1),class=sigma,resp=A),
+                prior(normal(0,0.2),class=Intercept,resp=M),
+                prior(normal(0,0.5),class=b,resp=M),
+                prior(exponential(1),class=sigma,
+                      resp=M)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5M4_all")
+
+
+print(b.5M4_all)
+```
+
+
+```{r}
+library(bayesplot)
+
+posterior_samples(b.5M4_all) %>% 
+  dplyr::select(-lp__) %>% 
+  dplyr::select(starts_with("b_")) %>% 
+  mcmc_intervals()
+
+posterior_samples(b.5M4_all) %>% 
+  dplyr::select(starts_with("b_")) %>% 
+  pivot_longer(everything()) %>% 
+  group_by(name) %>% 
+  median_hdi() %>% 
+  data.frame()
+```
+
+Graphical model
+```{r}
+library(dagitty)
+
+mad_dag <- dagitty("dag{  D<-A -> M <- L->D;
+                          A <- L
+                   }")
+
+ggdag(mad_dag)
+impliedConditionalIndependencies(mad_dag)
+ggdag_equivalent_dags(mad_dag)
+```
+
+<br />  
+
+### 5H1  
+> In the divorce example, suppose the DAG is: M→A→D. What are the implied conditional independencies of the graph? Are the data consistent with it?  
+
+
+```{r}
+library(dagitty)
+
+mad_dag <- dagitty("dag{M -> A -> D}")
+impliedConditionalIndependencies(mad_dag)
+```
+
+データに適合する因果ダイアグラムは以下の通り。  
+```{r}
+equivalentDAGs(mad_dag)
+```
+
+### 5H2  
+> Assuming that the DAG for the divorce example is indeed M→A→D, fit a new model and use it to estimate the counterfactual effect of halving a State’s marriage rate M. Using the counterfactual example from the chapter (starting on page 140) as a template.
+
+```{r}
+mad_dag <- dagitty("dag{  M -> A -> D}")
+ggdag_equivalent_dags(mad_dag)
+
+b1 <- bf(D ~ 1 + A + M)
+b2 <- bf(A ~ 1 + M)
+
+b.5H2 <- 
+  brm(data = d4,
+      family = gaussian,
+      formula = b1 + b2 + set_rescor(rescor = FALSE),
+      prior = c(prior(normal(0,0.2),class=Intercept,resp=D),  
+              prior(normal(0,0.2),class=Intercept,resp=A),
+                prior(normal(0,0.5),class=b,resp=A),
+                prior(normal(0,0.5),class=b,resp=D),
+                prior(exponential(1),class=sigma,
+                      resp = D),
+                prior(exponential(1),class=sigma,
+                      resp = A)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4, sample_prior = T,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5H2")
+
+print(b.5H2)
+
+posterior_samples(b.5H2) %>% 
+  dplyr::select(starts_with("b_")) %>% 
+  mcmc_intervals(prob = 0.5,prob_outer=.95)
+```
+
+<br />  
+
+```{r}
+posterior_samples(b.5H2) %>% 
+  data.frame() %>% 
+  dplyr::select(starts_with("b_"),starts_with("sigma")) %>% 
+  tidyr::expand(nesting(b_D_Intercept, b_A_Intercept, b_D_A, b_D_M, b_A_M,sigma_D, sigma_A),
+         M = seq(-2,2,length.out=50)) %>% 
+  mutate(a_sim = rnorm(n(),mean=b_A_Intercept+
+                         b_A_M*M, sigma_A),
+         d_sim = rnorm(n(),mean=b_D_Intercept+
+                         b_D_M*M + b_A_M*a_sim, sigma_D)) %>% 
+  dplyr::select(a_sim, M, d_sim) %>% 
+  pivot_longer(c(a_sim,d_sim)) %>% 
+  group_by(name,M) %>% 
+  mean_qi(value,.width = c(.89)) %>% 
+  ggplot(aes(x=M,y=value,
+             ymin = .lower,
+             ymax = .upper))+
+  geom_line()+
+  geom_ribbon(alpha=3/8)+
+  theme_classic()+
+  theme(aspect.ratio = 1)+
+  facet_wrap(~name)
+```
+
+<br />  
+
+### 5H3  
+> Return to the milk energy model, m5.7. Suppose that the true causal relationship among the variables is:
+
+```{r, fig.dim = c(3,3)}
+dagify(K ~ M + N,
+       N ~ M) %>% 
+  ggdag()+
+  theme_dag()
+```
+
+> Now compute the counterfactual effect on K of doubling M. You will need to account for both the direct and indirect paths of causation. Use the counterfactual example from the chapter (starting on page 140) as a template.
+
+```{r}
+b1 <- bf(N ~ 1 + M)
+b2 <- bf(K ~ 1 + M + N)
+
+b.5H3 <- 
+  brm(formula = b1 + b2 + set_rescor(FALSE),
+      data = d2_2,
+      family = gaussian,
+      prior = c(prior(normal(0, 0.2), class = Intercept, resp = N),
+                prior(normal(0, 0.2), class = Intercept, resp = K),
+                prior(normal(0, 0.5), class = b, resp = N),
+                prior(normal(0, 0.5), class = b, resp = K),
+                prior(exponential(1), class = sigma, resp = N),
+                prior(exponential(1), class = sigma, resp = K)),
+      seed =5, iter = 4000, warmup = 2000, chains =4,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5H3")
+
+print(b.5H3)
+pairs(b.5H3)
+```
+
+<br />  
+
+```{r}
+seq_M <- tibble(M = seq(0,80,length.out=200)) %>% 
+  mutate(M_log = log(M),
+         M_sim = standardize(M_log))
+
+sim <- 
+posterior_samples(b.5H3) %>% 
+  rownames_to_column(var = "iter") %>% 
+  rename(I_N = b_N_Intercept, I_K = b_K_Intercept) %>%
+  tidyr::expand(nesting(iter,I_N,I_K,b_N_M, b_K_M,
+                 b_K_N, sigma_N, sigma_K),
+         M = seq(0.5,80,length.out=200)) %>%
+  mutate(M_sim = (log(M) - mean(log(d2_2$mass)))/sd(log(d2_2$mass))) %>% 
+  mutate(sim_N = rnorm(n(),mean = I_N + b_N_M*M_sim,sigma_N),
+         sim_K = rnorm(n(),mean = I_K + b_K_M*M_sim + b_K_N*sim_N,sigma_K)) 
+
+sim %>% 
+  dplyr::select(M, M_sim,sim_K) %>% 
+  group_by(M) %>% 
+  mean_qi(sim_K) %>% 
+  ggplot(aes(x=M, y = sim_K, ymin = .lower,
+             ymax = .upper))+
+  geom_ribbon(alpha=3/8)+
+  geom_line(color = "black")+
+  labs(x = "mass", y= "counterfactual K")
+```
+
+<br />  
+
+### 5H4  
+> Here is an open practice problem to engage your imagination. In the divorce data, States in the southern United States have many of the highest divorce rates. Add the South indicator variable to the analysis. First, draw one or more DAGs that represent your ideas for how Southern American culture might influence any of the other three variables (D, M, or A). Then list the testable implications of your DAGs, if there are any, and fit one or more models to evaluate the implications. What do you think the influence of “Southerness” is?
+
+
+データの分布をみてみる。南部のほうが離婚率が高い。  
+```{r}
+data("WaffleDivorce")
+d <- WaffleDivorce
+
+d %>% 
+  ggplot(aes(x=as.factor(South),y=Divorce))+
+  geom_violin()+
+  stat_summary(geom = "point", fun = "median")
+```
+
+
+```{r}
+d %>% 
+  rename(A = MedianAgeMarriage, D = Divorce,
+         M = Marriage, S = South) %>% 
+  mutate(M = standardize(M), A = standardize(A),
+         D = standardize(D)) ->d
+
+```
+
+以下のような因果モデルを考える。  
+```{r}
+mad_dag <- dagitty("dag{  M -> A -> D <-M ;
+                          M  <-  S -> A}")
+ggdag(mad_dag)+
+  theme_dag()
+```
+
+モデリングを行う。  
+```{r}
+b1 <- bf(D ~ 1 + A + M + S)
+b2<- bf(M ~ 1 + A + S)
+b3 <- bf(A ~ 1 + M + S)
+
+b.5H4 <- 
+  brm(family=gaussian,
+      data =d,
+      formula = b1 + b2 + b3 + set_rescor(FALSE),
+      prior = c(prior(normal(0,0.2),class=Intercept,
+                      resp = D),
+                prior(normal(0,0.5),class=b,
+                      resp = D),
+                prior(exponential(1),class=sigma,
+                      resp = D),
+                prior(normal(0,0.2),class=Intercept,
+                      resp = M),
+                prior(normal(0,0.5),class=b,
+                      resp = M),
+                prior(exponential(1),class=sigma,
+                      resp = M),
+                prior(normal(0,0.2),class=Intercept,
+                      resp = A),
+                prior(normal(0,0.5),class=b,
+                      resp = A),
+                prior(exponential(1),class=sigma,
+                      resp = A)),
+      seed = 123, iter=4000,warmup=2000,chains=4,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5H4")
+
+summary(b.5H4)
+```
+
+
+```{r}
+library(bayesplot)
+
+posterior_samples(b.5H4) %>% 
+  dplyr::select(-lp__) %>% 
+  mcmc_intervals()
+```
+
+`L`も含むモデルを考える。  
+```{r}
+b.5H4_2 <- 
+  brm(data = d4,
+            family = gaussian,
+            formula = D ~ 1 + A + L + S + M,
+            prior= c(prior(normal(0,0.2),class=Intercept),
+                prior(normal(0,0.5),class=b),
+                prior(exponential(1),class=sigma)),
+      seed = 5, iter = 2000, warmup = 1000,
+      chains = 4,
+      backend = "cmdstanr",
+      file = "output/Chapter5/b.5H4_2")
+
+print(b.5H4_2)
+```
+
